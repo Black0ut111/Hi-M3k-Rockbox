@@ -47,6 +47,7 @@ jobs:
       - name: Build MIPS cross compiler
         if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
+          mkdir -p "$HOME/.local"
           export RBDEV_PREFIX="$HOME/.local/rockbox-toolchain"
           export RBDEV_BUILD="${{ runner.temp }}/rbdev-build"
           export RBDEV_DOWNLOAD="${{ runner.temp }}/rbdev-download"
