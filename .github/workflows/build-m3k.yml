@@ -42,30 +42,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/rockbox-toolchain
-          key: rockbox-mipsel-elf-gcc-9.5.0-binutils-2.38-v1
+          key: rockbox-mipsel-elf-gcc-9.5.0-binutils-2.38-v2
 
       - name: Build MIPS cross compiler
         if: steps.toolchain-cache.outputs.cache-hit != 'true'
-        env:
-          RBDEV_PREFIX: ${{ github.workspace }}/.toolchain-staging
-          RBDEV_BUILD: ${{ runner.temp }}/rbdev-build
-          RBDEV_DOWNLOAD: ${{ runner.temp }}/rbdev-download
         run: |
+          export RBDEV_PREFIX="$HOME/.local/rockbox-toolchain"
+          export RBDEV_BUILD="${{ runner.temp }}/rbdev-build"
+          export RBDEV_DOWNLOAD="${{ runner.temp }}/rbdev-download"
           rockbox/tools/rockboxdev.sh --target=i
-          mkdir -p "$HOME/.local"
-          mv "$RBDEV_PREFIX" "$HOME/.local/rockbox-toolchain"
+
+      - name: Add cross compiler to PATH
+        run: echo "$HOME/.local/rockbox-toolchain/bin" >> "$GITHUB_PATH"
 
       - name: Configure native FiiO M3K build
-        env:
-          PATH: ${{ env.HOME }}/.local/rockbox-toolchain/bin:${{ env.PATH }}
         run: |
           mkdir build-m3k
           cd build-m3k
           ../rockbox/tools/configure --target=fiiom3k --type=n
 
       - name: Build firmware package
-        env:
-          PATH: ${{ env.HOME }}/.local/rockbox-toolchain/bin:${{ env.PATH }}
         run: |
           make -C build-m3k -j2
           make -C build-m3k zip
