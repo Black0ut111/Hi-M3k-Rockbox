@@ -1,4 +1,4 @@
-name: Build FiiO M3K baseline
+name: Build Rockpod for FiiO M3K
 
 on:
   workflow_dispatch:
@@ -32,10 +32,18 @@ jobs:
             autoconf automake bison build-essential flex libtool-bin \
             patch texinfo xz-utils
 
-      - name: Check out upstream Rockbox
+      - name: Check out Rockpod source
         run: |
-          git clone --depth 1 https://github.com/Rockbox/rockbox.git rockbox
-          echo "ROCKBOX_REVISION=$(git -C rockbox rev-parse HEAD)" >> "$GITHUB_ENV"
+          git clone --depth 1 https://github.com/nuxcodes/rockpod.git rockbox
+          echo "ROCKPOD_REVISION=$(git -C rockbox rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Apply M3K compatibility patches
+        run: |
+          if compgen -G "patches/*.patch" > /dev/null; then
+            for patch_file in patches/*.patch; do
+              git -C rockbox apply "../$patch_file"
+            done
+          fi
 
       - name: Cache MIPS cross compiler
         id: toolchain-cache
@@ -66,17 +74,17 @@ jobs:
         run: |
           make -C build-m3k -j2
           make -C build-m3k zip
-          cp build-m3k/rockbox.zip rockbox-fiiom3k-baseline.zip
-          sha256sum rockbox-fiiom3k-baseline.zip > SHA256SUMS.txt
-          printf '%s\n' "$ROCKBOX_REVISION" > ROCKBOX_REVISION.txt
+          cp build-m3k/rockbox.zip rockpod-fiiom3k-alpha1.zip
+          sha256sum rockpod-fiiom3k-alpha1.zip > SHA256SUMS.txt
+          printf '%s\n' "$ROCKPOD_REVISION" > ROCKPOD_REVISION.txt
 
       - name: Upload test package
         uses: actions/upload-artifact@v4
         with:
-          name: rockbox-fiiom3k-baseline
+          name: rockpod-fiiom3k-alpha1
           path: |
-            rockbox-fiiom3k-baseline.zip
+            rockpod-fiiom3k-alpha1.zip
             SHA256SUMS.txt
-            ROCKBOX_REVISION.txt
+            ROCKPOD_REVISION.txt
           if-no-files-found: error
           retention-days: 14
