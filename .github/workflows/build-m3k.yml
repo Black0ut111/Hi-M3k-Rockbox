@@ -1,0 +1,85 @@
+name: Build FiiO M3K baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-m3k.yml"
+      - "patches/**"
+      - "scripts/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m3k-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out port files
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake bison build-essential flex libtool-bin \
+            patch texinfo xz-utils
+
+      - name: Check out upstream Rockbox
+        run: |
+          git clone --depth 1 https://github.com/Rockbox/rockbox.git rockbox
+          echo "ROCKBOX_REVISION=$(git -C rockbox rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Cache MIPS cross compiler
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/rockbox-toolchain
+          key: rockbox-mipsel-elf-gcc-9.5.0-binutils-2.38-v1
+
+      - name: Build MIPS cross compiler
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        env:
+          RBDEV_PREFIX: ${{ github.workspace }}/.toolchain-staging
+          RBDEV_BUILD: ${{ runner.temp }}/rbdev-build
+          RBDEV_DOWNLOAD: ${{ runner.temp }}/rbdev-download
+        run: |
+          rockbox/tools/rockboxdev.sh --target=i
+          mkdir -p "$HOME/.local"
+          mv "$RBDEV_PREFIX" "$HOME/.local/rockbox-toolchain"
+
+      - name: Configure native FiiO M3K build
+        env:
+          PATH: ${{ env.HOME }}/.local/rockbox-toolchain/bin:${{ env.PATH }}
+        run: |
+          mkdir build-m3k
+          cd build-m3k
+          ../rockbox/tools/configure --target=fiiom3k --type=n
+
+      - name: Build firmware package
+        env:
+          PATH: ${{ env.HOME }}/.local/rockbox-toolchain/bin:${{ env.PATH }}
+        run: |
+          make -C build-m3k -j2
+          make -C build-m3k zip
+          cp build-m3k/rockbox.zip rockbox-fiiom3k-baseline.zip
+          sha256sum rockbox-fiiom3k-baseline.zip > SHA256SUMS.txt
+          printf '%s\n' "$ROCKBOX_REVISION" > ROCKBOX_REVISION.txt
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: rockbox-fiiom3k-baseline
+          path: |
+            rockbox-fiiom3k-baseline.zip
+            SHA256SUMS.txt
+            ROCKBOX_REVISION.txt
+          if-no-files-found: error
+          retention-days: 14
