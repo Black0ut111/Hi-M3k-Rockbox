@@ -1,0 +1,63 @@
+diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
+index 394b586..a716722 100644
+--- a/apps/plugins/pictureflow/pictureflow.c
++++ b/apps/plugins/pictureflow/pictureflow.c
+@@ -4358,6 +4358,19 @@ static void show_track_list_loading(void)
+ /**
+   Display the list of tracks
+  */
++static bool pf_storage_is_fast(void)
++{
++#ifdef HAVE_DISK_STORAGE
++    if (rb->global_settings->storage_mode == 2)
++        return true;
++#endif
++#ifdef HAVE_TC_RAMCACHE
++    if (rb->tagcache_is_in_ram())
++        return true;
++#endif
++    return false;
++}
++
+ static bool show_track_list(void)
+ {
+ #ifdef HAVE_LCD_COLOR
+@@ -4367,11 +4380,7 @@ static bool show_track_list(void)
+ #endif
+     pf_clear_display();
+     if ( center_slide.slide_index != pf_tracks.cur_idx ) {
+-        if (rb->global_settings->storage_mode != 2
+-#ifdef HAVE_TC_RAMCACHE
+-            && !rb->tagcache_is_in_ram()
+-#endif
+-        )
++        if (!pf_storage_is_fast())
+             show_track_list_loading();
+         create_track_index(center_slide.slide_index);
+         if (pf_tracks.count == 0)
+@@ -4584,11 +4593,7 @@ static bool track_list_ready(void)
+ {
+     if (pf_state != pf_show_tracks)
+     {
+-        if (rb->global_settings->storage_mode != 2
+-#ifdef HAVE_TC_RAMCACHE
+-            && !rb->tagcache_is_in_ram()
+-#endif
+-        )
++        if (!pf_storage_is_fast())
+             rb->splash(0, ID2P(LANG_WAIT));
+         create_track_index(center_slide.slide_index);
+         if (pf_tracks.count == 0)
+@@ -5186,11 +5191,7 @@ static int pictureflow_main(void)
+                 update_cover_in_animation();
+                 render_all_slides();
+                 if (center_slide.slide_index != pf_tracks.cur_idx
+-                    && (rb->global_settings->storage_mode == 2
+-#ifdef HAVE_TC_RAMCACHE
+-                        || rb->tagcache_is_in_ram()
+-#endif
+-                    ))
++                    && pf_storage_is_fast())
+                 {
+                     create_track_index(center_slide.slide_index);
+                     if (pf_tracks.count > 0)
