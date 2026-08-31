@@ -1,0 +1,13 @@
+diff --git a/firmware/export/storage.h b/firmware/export/storage.h
+index 0896c48..c5db164 100644
+--- a/firmware/export/storage.h
++++ b/firmware/export/storage.h
+@@ -206,6 +206,8 @@ static inline void storage_sleep(void) {};
+     #elif (CONFIG_STORAGE & STORAGE_SD)
+         #define STORAGE_FUNCTION(NAME) (sd_## NAME)
+         #define storage_spindown(sec) sd_spindown(sec)
++        #define storage_set_storage_mode(mode) stub_storage_set_storage_mode(mode)
++        #define storage_get_ssd_mode() stub_storage_get_ssd_mode()
+         #define storage_spin() sd_spin()
+ 
+         #define storage_enable(on) sd_enable(on)
