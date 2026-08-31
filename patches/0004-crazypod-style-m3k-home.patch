@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..9e3249c 100644
+index e9942d9..c8b17d9 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -67,20 +67,28 @@
@@ -31,7 +31,7 @@ index e9942d9..9e3249c 100644
                                          * which is the current screen for the
                                          * rest of the code after load_screen
                                          * is called */
-@@ -710,20 +718,375 @@ static int get_selection(int last_screen)
+@@ -710,20 +718,379 @@ static int get_selection(int last_screen)
      {
          if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
              (root_menu__[i]->value == last_screen))
@@ -230,6 +230,14 @@ index e9942d9..9e3249c 100644
 +    }
 +}
 +
++static void crazypod_m3k_fill_roundrect(int x, int y, int width, int height)
++{
++    lcd_fillrect(x + 12, y, width - 24, height);
++    lcd_fillrect(x, y + 12, width, height - 24);
++    lcd_fillrect(x + 4, y + 6, width - 8, height - 12);
++    lcd_fillrect(x + 7, y + 3, width - 14, height - 6);
++}
++
 +static void crazypod_m3k_draw_card(int selection, int x, bool active)
 +{
 +    static const unsigned colors[] = {
@@ -239,9 +247,7 @@ index e9942d9..9e3249c 100644
 +    };
 +
 +    lcd_set_foreground(colors[selection % ARRAYLEN(colors)]);
-+    lcd_fillrect(x, 48, 184, 180);
-+    lcd_set_foreground(active ? LCD_WHITE : LCD_RGBPACK(190, 195, 210));
-+    lcd_drawrect(x, 48, 184, 180);
++    crazypod_m3k_fill_roundrect(x, 48, 184, 180);
 +    if (!(active && root_menu__[selection] == &wps_item
 +#ifdef HAVE_ALBUMART
 +          && crazypod_m3k_draw_albumart(x + 56, 70)
@@ -250,8 +256,6 @@ index e9942d9..9e3249c 100644
 +        crazypod_m3k_draw_icon(selection, x + 64, 84);
 +    lcd_set_foreground(LCD_WHITE);
 +    crazypod_m3k_card_text(crazypod_m3k_label(root_menu__[selection]), x, 163);
-+    lcd_set_foreground(LCD_RGBPACK(230, 235, 245));
-+    crazypod_m3k_card_text(active ? "SELECT TO OPEN" : "", x, 194);
 +}
 +
 +static void crazypod_m3k_draw_home(int selection, int offset)
@@ -407,7 +411,7 @@ index e9942d9..9e3249c 100644
      if (screen <= GO_TO_ROOT)
          return screen;
      if (screen == old_previous)
-@@ -975,21 +1338,25 @@ void root_menu(void)
+@@ -975,21 +1342,25 @@ void root_menu(void)
              case MENU_SELECTED_EXIT:
                  /* fall through */
              case GO_TO_ROOT:
@@ -433,4 +437,3 @@ index e9942d9..9e3249c 100644
              case GO_TO_DBBROWSER:
  #endif
              case GO_TO_FILEBROWSER:
-warning: in the working copy of 'apps/root_menu.c', LF will be replaced by CRLF the next time Git touches it
