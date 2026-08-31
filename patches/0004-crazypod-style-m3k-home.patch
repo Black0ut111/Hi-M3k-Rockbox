@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..cded155 100644
+index e9942d9..0405f38 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -74,6 +74,11 @@
@@ -14,7 +14,7 @@ index e9942d9..cded155 100644
  
  struct root_items {
      int (*function)(void* param);
-@@ -717,6 +722,303 @@ static int get_selection(int last_screen)
+@@ -717,6 +722,307 @@ static int get_selection(int last_screen)
      return 0;
  }
  
@@ -51,7 +51,7 @@ index e9942d9..cded155 100644
 +    crazypod_m3k_icons.data = crazypod_m3k_icons_data;
 +    crazypod_m3k_icons_loaded = read_bmp_file(
 +        ROCKBOX_DIR "/icons/CrazyPod-menu.bmp", &crazypod_m3k_icons,
-+        sizeof(crazypod_m3k_icons_data), FORMAT_NATIVE | FORMAT_TRANSPARENT,
++        sizeof(crazypod_m3k_icons_data), FORMAT_NATIVE,
 +        NULL) > 0;
 +    loaded = true;
 +}
@@ -137,8 +137,6 @@ index e9942d9..cded155 100644
 +        const char *artist = id3->artist ? id3->artist : "Unknown artist";
 +        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
 +                       id3->length : 0;
-+        lcd_set_foreground(LCD_RGBPACK(35, 40, 56));
-+        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
 +        lcd_set_foreground(LCD_WHITE);
 +        lcd_putsxy(20, 239,
 +                   (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||");
@@ -200,9 +198,9 @@ index e9942d9..cded155 100644
 +    }
 +
 +    lcd_set_foreground(LCD_BLACK);
-+    lcd_putsxy(13, 10, "CrazyPod");
++    lcd_putsxy(13, 10, "Hi-M3K");
 +    lcd_set_foreground(LCD_RGBPACK(225, 229, 240));
-+    lcd_putsxy(12, 9, "CrazyPod");
++    lcd_putsxy(12, 9, "Hi-M3K");
 +    snprintf(status, sizeof(status), "%02d:%02d  %d%%", now->tm_hour,
 +             now->tm_min, battery < 0 ? 0 : battery);
 +    {
@@ -311,6 +309,12 @@ index e9942d9..cded155 100644
 +        }
 +    }
 +
++    if (crazypod_m3k_wallpaper_loaded)
++        lcd_bmp(&crazypod_m3k_wallpaper, 0, 0);
++    else
++        lcd_clear_display();
++    lcd_update();
++
 +    return result;
 +}
 +#endif
@@ -318,7 +322,7 @@ index e9942d9..cded155 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-@@ -982,7 +1284,11 @@ void root_menu(void)
+@@ -982,7 +1288,11 @@ void root_menu(void)
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  

@@ -1,8 +1,9 @@
 # CrazyThemify secondary screens for FiiO M3K
 %Fl(2,16-WenQangYi-Unibit.fnt)
 %Fl(3,12-Adobe-Helvetica.fnt)
-%V(0,0,240,320,-)%Vb(0c0e17)%Vf(e1e5f0)%VB
-%V(12,8,216,24,2)%al%s%?Lt<%Lt|CrazyPod>
-%V(12,34,216,1,-)%Vf(e74656)%dr(0,0,216,1)
+%X(/.rockbox/backdrops/CrazyPod.bmp)
+%V(0,0,240,320,-)%Vf(e1e5f0)%VB
+%V(12,8,216,24,2)%al%s%?Lt<%Lt|Hi-M3K>
 %Vi(-,8,44,224,266,3)
 %V(12,303,216,15,3)%al%ca:%cM%ar%bl%%
+
