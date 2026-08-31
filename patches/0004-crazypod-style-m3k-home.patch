@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..9c9e8b8 100644
+index e9942d9..b779782 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -67,20 +67,28 @@
@@ -31,7 +31,7 @@ index e9942d9..9c9e8b8 100644
                                          * which is the current screen for the
                                          * rest of the code after load_screen
                                          * is called */
-@@ -710,20 +718,325 @@ static int get_selection(int last_screen)
+@@ -710,20 +718,337 @@ static int get_selection(int last_screen)
      {
          if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
              (root_menu__[i]->value == last_screen))
@@ -124,6 +124,8 @@ index e9942d9..9c9e8b8 100644
 +
 +static void crazypod_m3k_apply_theme(void)
 +{
++    static bool skins_loaded;
++
 +    global_settings.bg_color = LCD_RGBPACK(12, 14, 23);
 +    global_settings.fg_color = LCD_RGBPACK(225, 229, 240);
 +    global_settings.lss_color = LCD_RGBPACK(231, 70, 86);
@@ -131,6 +133,16 @@ index e9942d9..9c9e8b8 100644
 +    global_settings.lst_color = LCD_WHITE;
 +    screens[SCREEN_MAIN].set_background(global_settings.bg_color);
 +    screens[SCREEN_MAIN].set_foreground(global_settings.fg_color);
++
++    if (!skins_loaded)
++    {
++        strmemccpy(global_settings.wps_file, "CrazyThemify",
++                   sizeof(global_settings.wps_file));
++        strmemccpy(global_settings.sbs_file, "CrazyThemify",
++                   sizeof(global_settings.sbs_file));
++        settings_apply_skins();
++        skins_loaded = true;
++    }
 +}
 +
 +static void crazypod_m3k_draw_icon(int selection, int x, int y)
@@ -357,7 +369,7 @@ index e9942d9..9c9e8b8 100644
      if (screen <= GO_TO_ROOT)
          return screen;
      if (screen == old_previous)
-@@ -975,21 +1288,25 @@ void root_menu(void)
+@@ -975,21 +1300,25 @@ void root_menu(void)
              case MENU_SELECTED_EXIT:
                  /* fall through */
              case GO_TO_ROOT:
@@ -383,3 +395,4 @@ index e9942d9..9c9e8b8 100644
              case GO_TO_DBBROWSER:
  #endif
              case GO_TO_FILEBROWSER:
+warning: in the working copy of 'apps/root_menu.c', LF will be replaced by CRLF the next time Git touches it

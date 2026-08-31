@@ -8,6 +8,7 @@ on:
       - ".github/workflows/build-m3k.yml"
       - "patches/**"
       - "scripts/**"
+      - "theme-overlay/**"
 
 permissions:
   contents: read
@@ -30,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             autoconf automake bison build-essential flex libtool-bin \
-            patch texinfo xz-utils
+            patch texinfo xz-utils zip unzip
 
       - name: Check out pinned Rockpod source
         run: |
@@ -77,7 +78,10 @@ jobs:
         run: |
           make -C build-m3k -j2
           make -C build-m3k zip
-          cp build-m3k/rockbox.zip rockpod-fiiom3k-alpha1.zip
+          mkdir package
+          unzip -q build-m3k/rockbox.zip -d package
+          cp -a theme-overlay/. package/
+          (cd package && zip -qr ../rockpod-fiiom3k-alpha1.zip .rockbox)
           sha256sum rockpod-fiiom3k-alpha1.zip > SHA256SUMS.txt
           printf '%s\n' "$ROCKPOD_REVISION" > ROCKPOD_REVISION.txt
 
