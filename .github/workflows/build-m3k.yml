@@ -32,9 +32,12 @@ jobs:
             autoconf automake bison build-essential flex libtool-bin \
             patch texinfo xz-utils
 
-      - name: Check out Rockpod source
+      - name: Check out pinned Rockpod source
         run: |
-          git clone --depth 1 https://github.com/nuxcodes/rockpod.git rockbox
+          git init rockbox
+          git -C rockbox remote add origin https://github.com/nuxcodes/rockpod.git
+          git -C rockbox fetch --depth 1 origin 951d17c0575fbb61f3c585b5f0c3a0a941dcb10f
+          git -C rockbox checkout --detach FETCH_HEAD
           echo "ROCKPOD_REVISION=$(git -C rockbox rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Apply M3K compatibility patches
