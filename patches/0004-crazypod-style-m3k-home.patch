@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..b779782 100644
+index e9942d9..9e3249c 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -67,20 +67,28 @@
@@ -31,7 +31,7 @@ index e9942d9..b779782 100644
                                          * which is the current screen for the
                                          * rest of the code after load_screen
                                          * is called */
-@@ -710,20 +718,337 @@ static int get_selection(int last_screen)
+@@ -710,20 +718,375 @@ static int get_selection(int last_screen)
      {
          if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
              (root_menu__[i]->value == last_screen))
@@ -134,6 +134,14 @@ index e9942d9..b779782 100644
 +    screens[SCREEN_MAIN].set_background(global_settings.bg_color);
 +    screens[SCREEN_MAIN].set_foreground(global_settings.fg_color);
 +
++#ifdef HAVE_ALBUMART
++    if (global_settings.album_art == AA_OFF)
++    {
++        global_settings.album_art = AA_PREFER_EMBEDDED;
++        set_albumart_mode(global_settings.album_art);
++    }
++#endif
++
 +    if (!skins_loaded)
 +    {
 +        strmemccpy(global_settings.wps_file, "CrazyThemify",
@@ -143,6 +151,36 @@ index e9942d9..b779782 100644
 +        settings_apply_skins();
 +        skins_loaded = true;
 +    }
++}
++
++static void crazypod_m3k_draw_playing(bool update)
++{
++    struct mp3entry *id3 = audio_current_track();
++
++    lcd_set_foreground(LCD_RGBPACK(12, 14, 23));
++    lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
++    if ((audio_status() & AUDIO_STATUS_PLAY) && id3)
++    {
++        const char *title = id3->title ? id3->title : "Now Playing";
++        const char *artist = id3->artist ? id3->artist : "Unknown artist";
++        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
++                       id3->length : 0;
++        lcd_set_foreground(LCD_RGBPACK(35, 40, 56));
++        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
++        lcd_set_foreground(LCD_WHITE);
++        lcd_putsxy(20, 239,
++                   (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||");
++        crazypod_m3k_scroll_text(title, 39, 239, LCD_WIDTH - 59, 3);
++        lcd_set_foreground(LCD_RGBPACK(170, 178, 198));
++        crazypod_m3k_scroll_text(artist, 20, 256, LCD_WIDTH - 40, 4);
++        lcd_set_foreground(LCD_RGBPACK(83, 91, 112));
++        lcd_fillrect(12, 273, LCD_WIDTH - 24, 3);
++        lcd_set_foreground(LCD_RGBPACK(245, 92, 110));
++        lcd_fillrect(12, 273, progress, 3);
++    }
++
++    if (update)
++        lcd_update_rect(12, 234, LCD_WIDTH - 24, 42);
 +}
 +
 +static void crazypod_m3k_draw_icon(int selection, int x, int y)
@@ -224,7 +262,6 @@ index e9942d9..b779782 100644
 +    int next = (selection + 1) % count;
 +    int battery = battery_level();
 +    struct tm *now = get_time();
-+    struct mp3entry *id3 = audio_current_track();
 +
 +    lcd_set_drawmode(DRMODE_SOLID);
 +    lcd_set_background(LCD_RGBPACK(12, 14, 23));
@@ -245,25 +282,7 @@ index e9942d9..b779782 100644
 +    crazypod_m3k_draw_card(next, 28 + 192 + offset, false);
 +    crazypod_m3k_draw_card(selection, 28 + offset, true);
 +
-+    if ((audio_status() & AUDIO_STATUS_PLAY) && id3)
-+    {
-+        const char *title = id3->title ? id3->title : "Now Playing";
-+        const char *artist = id3->artist ? id3->artist : "Unknown artist";
-+        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
-+                       id3->length : 0;
-+        lcd_set_foreground(LCD_RGBPACK(35, 40, 56));
-+        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
-+        lcd_set_foreground(LCD_WHITE);
-+        lcd_putsxy(20, 239,
-+                   (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||");
-+        crazypod_m3k_scroll_text(title, 39, 239, LCD_WIDTH - 59, 3);
-+        lcd_set_foreground(LCD_RGBPACK(170, 178, 198));
-+        crazypod_m3k_scroll_text(artist, 20, 256, LCD_WIDTH - 40, 4);
-+        lcd_set_foreground(LCD_RGBPACK(83, 91, 112));
-+        lcd_fillrect(12, 273, LCD_WIDTH - 24, 3);
-+        lcd_set_foreground(LCD_RGBPACK(245, 92, 110));
-+        lcd_fillrect(12, 273, progress, 3);
-+    }
++    crazypod_m3k_draw_playing(false);
 +
 +    for (int i = 0; i < count; i++)
 +    {
@@ -293,6 +312,7 @@ index e9942d9..b779782 100644
 +{
 +    int count = MENU_GET_COUNT(root_menu_.flags);
 +    int result = GO_TO_ROOT;
++    char last_track[MAX_PATH] = "";
 +
 +    crazypod_m3k_apply_theme();
 +
@@ -306,13 +326,31 @@ index e9942d9..b779782 100644
 +    if (*selection < 0 || *selection >= count)
 +        *selection = 0;
 +
++    {
++        struct mp3entry *id3 = audio_current_track();
++        if (id3)
++            strmemccpy(last_track, id3->path, sizeof(last_track));
++    }
++    crazypod_m3k_draw_home(*selection, 0);
++
 +    while (true)
 +    {
 +        int action;
-+        crazypod_m3k_draw_home(*selection, 0);
-+        action = get_action(CONTEXT_MAINMENU, HZ / 8);
++        action = get_action(CONTEXT_MAINMENU, HZ / 2);
 +
-+        if (action == ACTION_STD_PREV || action == ACTION_STD_PREVREPEAT)
++        if (action == ACTION_NONE)
++        {
++            struct mp3entry *id3 = audio_current_track();
++            const char *path = id3 ? id3->path : "";
++            if (strcmp(last_track, path))
++            {
++                strmemccpy(last_track, path, sizeof(last_track));
++                crazypod_m3k_draw_home(*selection, 0);
++            }
++            else
++                crazypod_m3k_draw_playing(true);
++        }
++        else if (action == ACTION_STD_PREV || action == ACTION_STD_PREVREPEAT)
 +        {
 +            *selection = (*selection + count - 1) % count;
 +            crazypod_m3k_animate(*selection, -1);
@@ -369,7 +407,7 @@ index e9942d9..b779782 100644
      if (screen <= GO_TO_ROOT)
          return screen;
      if (screen == old_previous)
-@@ -975,21 +1300,25 @@ void root_menu(void)
+@@ -975,21 +1338,25 @@ void root_menu(void)
              case MENU_SELECTED_EXIT:
                  /* fall through */
              case GO_TO_ROOT:
