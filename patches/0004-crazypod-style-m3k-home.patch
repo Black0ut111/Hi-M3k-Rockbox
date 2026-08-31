@@ -2,7 +2,14 @@ diff --git a/apps/root_menu.c b/apps/root_menu.c
 index e9942d9..b0c5b77 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
-@@ -74,6 +74,10 @@
+@@ -67,20 +67,24 @@
+ #ifdef HAVE_RTC_ALARM
+ #include "rtc.h"
+ #endif
+ #ifdef HAVE_TAGCACHE
+ #include "tagcache.h"
+ #endif
+ #include "language.h"
  #include "plugin.h"
  #include "filetypes.h"
  #include "disk.h"
@@ -13,7 +20,21 @@ index e9942d9..b0c5b77 100644
  
  struct root_items {
      int (*function)(void* param);
-@@ -717,6 +721,206 @@ static int get_selection(int last_screen)
+     void* param;
+     const struct menu_item_ex *context_menu;
+ };
+ static int next_screen = GO_TO_ROOT; /* holding info about the upcoming screen
+                                         * which is the current screen for the
+                                         * rest of the code after load_screen
+                                         * is called */
+@@ -710,20 +714,220 @@ static int get_selection(int last_screen)
+     {
+         if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
+             (root_menu__[i]->value == last_screen))
+         {
+             return i;
+         }
+     }
      return 0;
  }
  
@@ -220,7 +241,21 @@ index e9942d9..b0c5b77 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-@@ -982,7 +1186,11 @@ void root_menu(void)
+         if we dont we will always return to the wrong screen on boot */
+     int old_previous = last_screen;
+     int ret_val;
+     enum current_activity activity = ACTIVITY_UNKNOWN;
+     if (screen <= GO_TO_ROOT)
+         return screen;
+     if (screen == old_previous)
+@@ -975,21 +1179,25 @@ void root_menu(void)
+             case MENU_SELECTED_EXIT:
+                 /* fall through */
+             case GO_TO_ROOT:
+                 if (last_screen != GO_TO_ROOT)
+                     selected = get_selection(last_screen);
+                 global_status.last_screen = GO_TO_ROOT; /* We've returned to ROOT */
+                 /* When we are in the main menu we want the hardware BACK
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  
@@ -231,3 +266,12 @@ index e9942d9..b0c5b77 100644
 +#endif
  
                  ignore_back_button_stub(false);
+ 
+                 if (next_screen != GO_TO_PREVIOUS)
+                     last_screen = GO_TO_ROOT;
+                 break;
+ #ifdef HAVE_TAGCACHE
+             case GO_TO_DBBROWSER:
+ #endif
+             case GO_TO_FILEBROWSER:
+
