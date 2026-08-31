@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..d056e42 100644
+index e9942d9..cded155 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -74,6 +74,11 @@
@@ -14,18 +14,18 @@ index e9942d9..d056e42 100644
  
  struct root_items {
      int (*function)(void* param);
-@@ -717,6 +722,300 @@ static int get_selection(int last_screen)
+@@ -717,6 +722,303 @@ static int get_selection(int last_screen)
      return 0;
  }
  
 +#ifdef FIIO_M3K
 +#define CRAZYPOD_ICON_SIZE 96
 +#define CRAZYPOD_ICON_COUNT 9
-+#define CRAZYPOD_ICON_SHEET_WIDTH (CRAZYPOD_ICON_SIZE * CRAZYPOD_ICON_COUNT)
++#define CRAZYPOD_ICON_SHEET_HEIGHT (CRAZYPOD_ICON_SIZE * CRAZYPOD_ICON_COUNT)
 +#define CRAZYPOD_ICON_ALPHA_BYTES \
-+    (ALIGN_UP(CRAZYPOD_ICON_SHEET_WIDTH, 2) * CRAZYPOD_ICON_SIZE / 2)
++    (ALIGN_UP(CRAZYPOD_ICON_SIZE, 2) * CRAZYPOD_ICON_SHEET_HEIGHT / 2)
 +#define CRAZYPOD_ICON_BUFFER_BYTES \
-+    (BM_SIZE(CRAZYPOD_ICON_SHEET_WIDTH, CRAZYPOD_ICON_SIZE, \
++    (BM_SIZE(CRAZYPOD_ICON_SIZE, CRAZYPOD_ICON_SHEET_HEIGHT, \
 +             FORMAT_NATIVE, false) + CRAZYPOD_ICON_ALPHA_BYTES)
 +
 +static unsigned char crazypod_m3k_wallpaper_data[LCD_BACKDROP_BYTES];
@@ -111,6 +111,9 @@ index e9942d9..d056e42 100644
 +                   sizeof(global_settings.wps_file));
 +        strmemccpy(global_settings.sbs_file, "CrazyThemify",
 +                   sizeof(global_settings.sbs_file));
++        strmemccpy(global_settings.backdrop_file,
++                   ROCKBOX_DIR "/backdrops/CrazyPod.bmp",
++                   sizeof(global_settings.backdrop_file));
 +        settings_apply_skins();
 +        skins_loaded = true;
 +    }
@@ -173,7 +176,7 @@ index e9942d9..d056e42 100644
 +    int icon = crazypod_m3k_icon_index(root_menu__[selection]);
 +
 +    if (crazypod_m3k_icons_loaded)
-+        lcd_bmp_part(&crazypod_m3k_icons, icon * CRAZYPOD_ICON_SIZE, 0,
++        lcd_bmp_part(&crazypod_m3k_icons, 0, icon * CRAZYPOD_ICON_SIZE,
 +                     x, y, CRAZYPOD_ICON_SIZE, CRAZYPOD_ICON_SIZE);
 +}
 +
@@ -315,7 +318,7 @@ index e9942d9..d056e42 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-@@ -982,7 +1281,11 @@ void root_menu(void)
+@@ -982,7 +1284,11 @@ void root_menu(void)
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  
