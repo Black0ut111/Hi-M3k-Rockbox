@@ -2,7 +2,7 @@ diff --git a/firmware/export/storage.h b/firmware/export/storage.h
 index c5db164..1b8738e 100644
 --- a/firmware/export/storage.h
 +++ b/firmware/export/storage.h
-@@ -207,7 +207,9 @@ static inline void storage_sleep(void) {};
+@@ -207,7 +207,8 @@ static inline void storage_sleep(void) {};
          #define STORAGE_FUNCTION(NAME) (sd_## NAME)
          #define storage_spindown(sec) sd_spindown(sec)
          #define storage_set_storage_mode(mode) stub_storage_set_storage_mode(mode)
