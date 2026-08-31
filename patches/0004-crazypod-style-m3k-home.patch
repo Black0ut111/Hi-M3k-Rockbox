@@ -1,96 +1,59 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..c8b17d9 100644
+index e9942d9..d056e42 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
-@@ -67,20 +67,28 @@
- #ifdef HAVE_RTC_ALARM
- #include "rtc.h"
- #endif
- #ifdef HAVE_TAGCACHE
- #include "tagcache.h"
- #endif
- #include "language.h"
+@@ -74,6 +74,11 @@
  #include "plugin.h"
  #include "filetypes.h"
  #include "disk.h"
 +#ifdef FIIO_M3K
 +#include "lcd.h"
 +#include "timefuncs.h"
-+#ifdef HAVE_ALBUMART
-+#include "playback.h"
-+#include "buffering.h"
-+#endif
++#include "bmp.h"
 +#endif
  
  struct root_items {
      int (*function)(void* param);
-     void* param;
-     const struct menu_item_ex *context_menu;
- };
- static int next_screen = GO_TO_ROOT; /* holding info about the upcoming screen
-                                         * which is the current screen for the
-                                         * rest of the code after load_screen
-                                         * is called */
-@@ -710,20 +718,379 @@ static int get_selection(int last_screen)
-     {
-         if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
-             (root_menu__[i]->value == last_screen))
-         {
-             return i;
-         }
-     }
+@@ -717,6 +722,300 @@ static int get_selection(int last_screen)
      return 0;
  }
  
 +#ifdef FIIO_M3K
-+#ifdef HAVE_ALBUMART
-+static int crazypod_m3k_aa_slot = -1;
++#define CRAZYPOD_ICON_SIZE 96
++#define CRAZYPOD_ICON_COUNT 9
++#define CRAZYPOD_ICON_SHEET_WIDTH (CRAZYPOD_ICON_SIZE * CRAZYPOD_ICON_COUNT)
++#define CRAZYPOD_ICON_ALPHA_BYTES \
++    (ALIGN_UP(CRAZYPOD_ICON_SHEET_WIDTH, 2) * CRAZYPOD_ICON_SIZE / 2)
++#define CRAZYPOD_ICON_BUFFER_BYTES \
++    (BM_SIZE(CRAZYPOD_ICON_SHEET_WIDTH, CRAZYPOD_ICON_SIZE, \
++             FORMAT_NATIVE, false) + CRAZYPOD_ICON_ALPHA_BYTES)
 +
-+static bool crazypod_m3k_draw_albumart(int x, int y)
++static unsigned char crazypod_m3k_wallpaper_data[LCD_BACKDROP_BYTES];
++static unsigned char crazypod_m3k_icons_data[CRAZYPOD_ICON_BUFFER_BYTES];
++static struct bitmap crazypod_m3k_wallpaper;
++static struct bitmap crazypod_m3k_icons;
++static bool crazypod_m3k_wallpaper_loaded;
++static bool crazypod_m3k_icons_loaded;
++
++static void crazypod_m3k_load_assets(void)
 +{
-+    int handle;
-+    struct bitmap *bmp;
++    static bool loaded;
 +
-+    if (crazypod_m3k_aa_slot < 0)
-+        return false;
++    if (loaded)
++        return;
 +
-+    handle = playback_current_aa_hid(crazypod_m3k_aa_slot);
-+    if (handle < 0 || bufgetdata(handle, 0, (void *)&bmp) <= 0)
-+        return false;
++    crazypod_m3k_wallpaper.data = crazypod_m3k_wallpaper_data;
++    crazypod_m3k_wallpaper_loaded = read_bmp_file(
++        ROCKBOX_DIR "/backdrops/CrazyPod.bmp", &crazypod_m3k_wallpaper,
++        sizeof(crazypod_m3k_wallpaper_data), FORMAT_NATIVE | FORMAT_DITHER,
++        NULL) > 0;
 +
-+    lcd_bmp_part(bmp, 0, 0, x, y, bmp->width, bmp->height);
-+    return true;
-+}
-+#endif
-+
-+static const char *crazypod_m3k_label(const struct menu_item_ex *item)
-+{
-+#ifdef HAVE_TAGCACHE
-+    if (item == &pictureflow_item) return "Cover Flow";
-+    if (item == &db_browser) return "Music";
-+#endif
-+    if (item == &file_browser) return "Files";
-+    if (item == &wps_item) return "Now Playing";
-+    if (item == &playlists) return "Playlists";
-+    if (item == &rocks_browser) return "Apps";
-+    if (item == &shortcut_menu) return "Favorites";
-+    if (item == &menu_) return "Settings";
-+    if (item == &system_menu_) return "System";
-+    return "Rockbox";
-+}
-+
-+static void crazypod_m3k_center_text(const char *text, int y)
-+{
-+    int width;
-+    lcd_getstringsize((const unsigned char *)text, &width, NULL);
-+    lcd_putsxy((LCD_WIDTH - width) / 2, y, text);
-+}
-+
-+static void crazypod_m3k_card_text(const char *text, int x, int y)
-+{
-+    int width;
-+    lcd_getstringsize((const unsigned char *)text, &width, NULL);
-+    lcd_putsxy(x + (184 - width) / 2, y, text);
++    crazypod_m3k_icons.data = crazypod_m3k_icons_data;
++    crazypod_m3k_icons_loaded = read_bmp_file(
++        ROCKBOX_DIR "/icons/CrazyPod-menu.bmp", &crazypod_m3k_icons,
++        sizeof(crazypod_m3k_icons_data), FORMAT_NATIVE | FORMAT_TRANSPARENT,
++        NULL) > 0;
++    loaded = true;
 +}
 +
 +static void crazypod_m3k_scroll_text(const char *text, int x, int y,
@@ -157,8 +120,14 @@ index e9942d9..c8b17d9 100644
 +{
 +    struct mp3entry *id3 = audio_current_track();
 +
-+    lcd_set_foreground(LCD_RGBPACK(12, 14, 23));
-+    lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
++    if (crazypod_m3k_wallpaper_loaded)
++        lcd_bmp_part(&crazypod_m3k_wallpaper, 12, 234, 12, 234,
++                     LCD_WIDTH - 24, 42);
++    else
++    {
++        lcd_set_foreground(LCD_RGBPACK(12, 14, 23));
++        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
++    }
 +    if ((audio_status() & AUDIO_STATUS_PLAY) && id3)
 +    {
 +        const char *title = id3->title ? id3->title : "Now Playing";
@@ -183,79 +152,29 @@ index e9942d9..c8b17d9 100644
 +        lcd_update_rect(12, 234, LCD_WIDTH - 24, 42);
 +}
 +
-+static void crazypod_m3k_draw_icon(int selection, int x, int y)
++static int crazypod_m3k_icon_index(const struct menu_item_ex *item)
 +{
-+    int kind = selection % 6;
-+
-+    lcd_set_foreground(LCD_WHITE);
-+    if (kind == 0)
-+    {
-+        lcd_drawrect(x + 7, y + 5, 42, 48);
-+        lcd_drawline(x + 15, y + 39, x + 40, y + 14);
-+        lcd_drawline(x + 15, y + 39, x + 40, y + 39);
-+    }
-+    else if (kind == 1)
-+    {
-+        lcd_drawrect(x + 8, y + 8, 40, 40);
-+        lcd_fillrect(x + 17, y + 26, 7, 13);
-+        lcd_fillrect(x + 31, y + 18, 7, 21);
-+    }
-+    else if (kind == 2)
-+    {
-+        lcd_drawrect(x + 6, y + 14, 44, 34);
-+        lcd_drawline(x + 6, y + 14, x + 22, y + 14);
-+        lcd_drawline(x + 22, y + 14, x + 28, y + 8);
-+        lcd_drawline(x + 28, y + 8, x + 45, y + 8);
-+    }
-+    else if (kind == 3)
-+    {
-+        lcd_drawrect(x + 9, y + 8, 38, 43);
-+        lcd_fillrect(x + 20, y + 18, 5, 23);
-+        lcd_fillrect(x + 32, y + 18, 5, 23);
-+    }
-+    else if (kind == 4)
-+    {
-+        lcd_drawrect(x + 8, y + 10, 40, 42);
-+        lcd_drawline(x + 18, y + 5, x + 18, y + 16);
-+        lcd_drawline(x + 38, y + 5, x + 38, y + 16);
-+        lcd_drawline(x + 14, y + 27, x + 42, y + 27);
-+        lcd_drawline(x + 14, y + 38, x + 42, y + 38);
-+    }
-+    else
-+    {
-+        lcd_drawrect(x + 8, y + 8, 40, 40);
-+        lcd_drawrect(x + 18, y + 18, 20, 20);
-+        lcd_fillrect(x + 25, y + 2, 6, 12);
-+        lcd_fillrect(x + 25, y + 43, 6, 12);
-+    }
-+}
-+
-+static void crazypod_m3k_fill_roundrect(int x, int y, int width, int height)
-+{
-+    lcd_fillrect(x + 12, y, width - 24, height);
-+    lcd_fillrect(x, y + 12, width, height - 24);
-+    lcd_fillrect(x + 4, y + 6, width - 8, height - 12);
-+    lcd_fillrect(x + 7, y + 3, width - 14, height - 6);
-+}
-+
-+static void crazypod_m3k_draw_card(int selection, int x, bool active)
-+{
-+    static const unsigned colors[] = {
-+        LCD_RGBPACK(231, 70, 86), LCD_RGBPACK(80, 132, 255),
-+        LCD_RGBPACK(54, 190, 150), LCD_RGBPACK(160, 92, 245),
-+        LCD_RGBPACK(240, 155, 55), LCD_RGBPACK(44, 176, 214)
-+    };
-+
-+    lcd_set_foreground(colors[selection % ARRAYLEN(colors)]);
-+    crazypod_m3k_fill_roundrect(x, 48, 184, 180);
-+    if (!(active && root_menu__[selection] == &wps_item
-+#ifdef HAVE_ALBUMART
-+          && crazypod_m3k_draw_albumart(x + 56, 70)
++#ifdef HAVE_TAGCACHE
++    if (item == &pictureflow_item) return 0;
++    if (item == &db_browser) return 1;
 +#endif
-+        ))
-+        crazypod_m3k_draw_icon(selection, x + 64, 84);
-+    lcd_set_foreground(LCD_WHITE);
-+    crazypod_m3k_card_text(crazypod_m3k_label(root_menu__[selection]), x, 163);
++    if (item == &file_browser) return 2;
++    if (item == &wps_item) return 3;
++    if (item == &playlists) return 4;
++    if (item == &rocks_browser) return 5;
++    if (item == &shortcut_menu) return 6;
++    if (item == &menu_) return 7;
++    if (item == &system_menu_) return 8;
++    return 1;
++}
++
++static void crazypod_m3k_draw_menu_icon(int selection, int x, int y)
++{
++    int icon = crazypod_m3k_icon_index(root_menu__[selection]);
++
++    if (crazypod_m3k_icons_loaded)
++        lcd_bmp_part(&crazypod_m3k_icons, icon * CRAZYPOD_ICON_SIZE, 0,
++                     x, y, CRAZYPOD_ICON_SIZE, CRAZYPOD_ICON_SIZE);
 +}
 +
 +static void crazypod_m3k_draw_home(int selection, int offset)
@@ -269,9 +188,16 @@ index e9942d9..c8b17d9 100644
 +
 +    lcd_set_drawmode(DRMODE_SOLID);
 +    lcd_set_background(LCD_RGBPACK(12, 14, 23));
-+    lcd_set_foreground(LCD_RGBPACK(12, 14, 23));
-+    lcd_clear_display();
++    if (crazypod_m3k_wallpaper_loaded)
++        lcd_bmp(&crazypod_m3k_wallpaper, 0, 0);
++    else
++    {
++        lcd_set_foreground(LCD_RGBPACK(12, 14, 23));
++        lcd_clear_display();
++    }
 +
++    lcd_set_foreground(LCD_BLACK);
++    lcd_putsxy(13, 10, "CrazyPod");
 +    lcd_set_foreground(LCD_RGBPACK(225, 229, 240));
 +    lcd_putsxy(12, 9, "CrazyPod");
 +    snprintf(status, sizeof(status), "%02d:%02d  %d%%", now->tm_hour,
@@ -282,9 +208,9 @@ index e9942d9..c8b17d9 100644
 +        lcd_putsxy(LCD_WIDTH - width - 12, 9, status);
 +    }
 +
-+    crazypod_m3k_draw_card(previous, 28 - 192 + offset, false);
-+    crazypod_m3k_draw_card(next, 28 + 192 + offset, false);
-+    crazypod_m3k_draw_card(selection, 28 + offset, true);
++    crazypod_m3k_draw_menu_icon(previous, 72 - 128 + offset, 76);
++    crazypod_m3k_draw_menu_icon(next, 72 + 128 + offset, 76);
++    crazypod_m3k_draw_menu_icon(selection, 72 + offset, 76);
 +
 +    crazypod_m3k_draw_playing(false);
 +
@@ -295,14 +221,12 @@ index e9942d9..c8b17d9 100644
 +        lcd_fillrect(x, 286, i == selection ? 7 : 4, 4);
 +    }
 +
-+    lcd_set_foreground(LCD_RGBPACK(145, 152, 172));
-+    crazypod_m3k_center_text("UP / DOWN  browse", 301);
 +    lcd_update();
 +}
 +
 +static void crazypod_m3k_animate(int selection, int direction)
 +{
-+    static const unsigned char easing[] = {160, 104, 60, 28, 8, 0};
++    static const unsigned char easing[] = {128, 84, 48, 22, 7, 0};
 +    int sign = direction > 0 ? 1 : -1;
 +
 +    for (unsigned frame = 0; frame < ARRAYLEN(easing); frame++)
@@ -319,13 +243,7 @@ index e9942d9..c8b17d9 100644
 +    char last_track[MAX_PATH] = "";
 +
 +    crazypod_m3k_apply_theme();
-+
-+#ifdef HAVE_ALBUMART
-+    struct dim aa_dim = {72, 72};
-+    crazypod_m3k_aa_slot = playback_claim_aa_slot(&aa_dim);
-+    if (crazypod_m3k_aa_slot >= 0)
-+        playback_update_aa_dims();
-+#endif
++    crazypod_m3k_load_assets();
 +
 +    if (*selection < 0 || *selection >= count)
 +        *selection = 0;
@@ -390,13 +308,6 @@ index e9942d9..c8b17d9 100644
 +        }
 +    }
 +
-+#ifdef HAVE_ALBUMART
-+    if (crazypod_m3k_aa_slot >= 0)
-+    {
-+        playback_release_aa_slot(crazypod_m3k_aa_slot);
-+        crazypod_m3k_aa_slot = -1;
-+    }
-+#endif
 +    return result;
 +}
 +#endif
@@ -404,21 +315,7 @@ index e9942d9..c8b17d9 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-         if we dont we will always return to the wrong screen on boot */
-     int old_previous = last_screen;
-     int ret_val;
-     enum current_activity activity = ACTIVITY_UNKNOWN;
-     if (screen <= GO_TO_ROOT)
-         return screen;
-     if (screen == old_previous)
-@@ -975,21 +1342,25 @@ void root_menu(void)
-             case MENU_SELECTED_EXIT:
-                 /* fall through */
-             case GO_TO_ROOT:
-                 if (last_screen != GO_TO_ROOT)
-                     selected = get_selection(last_screen);
-                 global_status.last_screen = GO_TO_ROOT; /* We've returned to ROOT */
-                 /* When we are in the main menu we want the hardware BACK
+@@ -982,7 +1281,11 @@ void root_menu(void)
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  
@@ -430,10 +327,3 @@ index e9942d9..c8b17d9 100644
  
                  ignore_back_button_stub(false);
  
-                 if (next_screen != GO_TO_PREVIOUS)
-                     last_screen = GO_TO_ROOT;
-                 break;
- #ifdef HAVE_TAGCACHE
-             case GO_TO_DBBROWSER:
- #endif
-             case GO_TO_FILEBROWSER:
