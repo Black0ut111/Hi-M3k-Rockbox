@@ -1,8 +1,8 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..b0c5b77 100644
+index e9942d9..2be2bc5 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
-@@ -67,20 +67,24 @@
+@@ -67,20 +67,28 @@
  #ifdef HAVE_RTC_ALARM
  #include "rtc.h"
  #endif
@@ -16,6 +16,10 @@ index e9942d9..b0c5b77 100644
 +#ifdef FIIO_M3K
 +#include "lcd.h"
 +#include "timefuncs.h"
++#ifdef HAVE_ALBUMART
++#include "playback.h"
++#include "buffering.h"
++#endif
 +#endif
  
  struct root_items {
@@ -27,7 +31,7 @@ index e9942d9..b0c5b77 100644
                                          * which is the current screen for the
                                          * rest of the code after load_screen
                                          * is called */
-@@ -710,20 +714,220 @@ static int get_selection(int last_screen)
+@@ -710,20 +718,283 @@ static int get_selection(int last_screen)
      {
          if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
              (root_menu__[i]->value == last_screen))
@@ -39,6 +43,26 @@ index e9942d9..b0c5b77 100644
  }
  
 +#ifdef FIIO_M3K
++#ifdef HAVE_ALBUMART
++static int crazypod_m3k_aa_slot = -1;
++
++static bool crazypod_m3k_draw_albumart(int x, int y)
++{
++    int handle;
++    struct bitmap *bmp;
++
++    if (crazypod_m3k_aa_slot < 0)
++        return false;
++
++    handle = playback_current_aa_hid(crazypod_m3k_aa_slot);
++    if (handle < 0 || bufgetdata(handle, 0, (void *)&bmp) <= 0)
++        return false;
++
++    lcd_bmp_part(bmp, 0, 0, x, y, bmp->width, bmp->height);
++    return true;
++}
++#endif
++
 +static const char *crazypod_m3k_label(const struct menu_item_ex *item)
 +{
 +#ifdef HAVE_TAGCACHE
@@ -128,7 +152,12 @@ index e9942d9..b0c5b77 100644
 +    lcd_fillrect(x, 48, 184, 180);
 +    lcd_set_foreground(active ? LCD_WHITE : LCD_RGBPACK(190, 195, 210));
 +    lcd_drawrect(x, 48, 184, 180);
-+    crazypod_m3k_draw_icon(selection, x + 64, 84);
++    if (!(active && root_menu__[selection] == &wps_item
++#ifdef HAVE_ALBUMART
++          && crazypod_m3k_draw_albumart(x + 56, 70)
++#endif
++        ))
++        crazypod_m3k_draw_icon(selection, x + 64, 84);
 +    lcd_set_foreground(LCD_WHITE);
 +    crazypod_m3k_card_text(crazypod_m3k_label(root_menu__[selection]), x, 163);
 +    lcd_set_foreground(LCD_RGBPACK(230, 235, 245));
@@ -138,7 +167,7 @@ index e9942d9..b0c5b77 100644
 +static void crazypod_m3k_draw_home(int selection, int offset)
 +{
 +    char status[32];
-+    char playing[40];
++    char playing[64];
 +    int count = MENU_GET_COUNT(root_menu_.flags);
 +    int previous = (selection + count - 1) % count;
 +    int next = (selection + 1) % count;
@@ -168,19 +197,29 @@ index e9942d9..b0c5b77 100644
 +    if ((audio_status() & AUDIO_STATUS_PLAY) && id3)
 +    {
 +        const char *title = id3->title ? id3->title : "Now Playing";
-+        snprintf(playing, sizeof(playing), "%s  %.26s",
++        const char *artist = id3->artist ? id3->artist : "Unknown artist";
++        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
++                       id3->length : 0;
++        snprintf(playing, sizeof(playing), "%s %.22s",
 +                 (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||", title);
 +        lcd_set_foreground(LCD_RGBPACK(35, 40, 56));
-+        lcd_fillrect(12, 236, LCD_WIDTH - 24, 34);
++        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
 +        lcd_set_foreground(LCD_WHITE);
-+        lcd_putsxy(22, 246, playing);
++        lcd_putsxy(20, 239, playing);
++        lcd_set_foreground(LCD_RGBPACK(170, 178, 198));
++        snprintf(playing, sizeof(playing), "%.28s", artist);
++        lcd_putsxy(20, 256, playing);
++        lcd_set_foreground(LCD_RGBPACK(83, 91, 112));
++        lcd_fillrect(12, 273, LCD_WIDTH - 24, 3);
++        lcd_set_foreground(LCD_RGBPACK(245, 92, 110));
++        lcd_fillrect(12, 273, progress, 3);
 +    }
 +
 +    for (int i = 0; i < count; i++)
 +    {
 +        int x = (LCD_WIDTH - count * 10) / 2 + i * 10;
 +        lcd_set_foreground(i == selection ? LCD_WHITE : LCD_RGBPACK(76, 82, 102));
-+        lcd_fillrect(x, 280, i == selection ? 7 : 4, 4);
++        lcd_fillrect(x, 286, i == selection ? 7 : 4, 4);
 +    }
 +
 +    lcd_set_foreground(LCD_RGBPACK(145, 152, 172));
@@ -201,6 +240,14 @@ index e9942d9..b0c5b77 100644
 +static int crazypod_m3k_home(int *selection)
 +{
 +    int count = MENU_GET_COUNT(root_menu_.flags);
++    int result = GO_TO_ROOT;
++
++#ifdef HAVE_ALBUMART
++    struct dim aa_dim = {72, 72};
++    crazypod_m3k_aa_slot = playback_claim_aa_slot(&aa_dim);
++    if (crazypod_m3k_aa_slot >= 0)
++        playback_update_aa_dims();
++#endif
 +
 +    if (*selection < 0 || *selection >= count)
 +        *selection = 0;
@@ -225,16 +272,36 @@ index e9942d9..b0c5b77 100644
 +        {
 +            const struct menu_item_ex *item = root_menu__[*selection];
 +            if ((item->flags & MENU_TYPE_MASK) == MT_RETURN_VALUE)
-+                return item->value;
-+            return do_menu(item, NULL, NULL, false);
++                result = item->value;
++            else
++                result = do_menu(item, NULL, NULL, false);
++            break;
 +        }
 +        else if (action == ACTION_TREE_WPS)
-+            return GO_TO_WPS;
++        {
++            result = GO_TO_WPS;
++            break;
++        }
 +        else if (action == ACTION_STD_MENU || action == ACTION_STD_QUICKSCREEN)
-+            return GO_TO_MAINMENU;
++        {
++            result = GO_TO_MAINMENU;
++            break;
++        }
 +        else if (default_event_handler(action) == SYS_USB_CONNECTED)
-+            return MENU_ATTACHED_USB;
++        {
++            result = MENU_ATTACHED_USB;
++            break;
++        }
 +    }
++
++#ifdef HAVE_ALBUMART
++    if (crazypod_m3k_aa_slot >= 0)
++    {
++        playback_release_aa_slot(crazypod_m3k_aa_slot);
++        crazypod_m3k_aa_slot = -1;
++    }
++#endif
++    return result;
 +}
 +#endif
 +
@@ -248,7 +315,7 @@ index e9942d9..b0c5b77 100644
      if (screen <= GO_TO_ROOT)
          return screen;
      if (screen == old_previous)
-@@ -975,21 +1179,25 @@ void root_menu(void)
+@@ -975,21 +1246,25 @@ void root_menu(void)
              case MENU_SELECTED_EXIT:
                  /* fall through */
              case GO_TO_ROOT:
@@ -274,4 +341,3 @@ index e9942d9..b0c5b77 100644
              case GO_TO_DBBROWSER:
  #endif
              case GO_TO_FILEBROWSER:
-
