@@ -1,8 +1,122 @@
 diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
-index 394b586..a716722 100644
+index 394b586..9426003 100644
 --- a/apps/plugins/pictureflow/pictureflow.c
 +++ b/apps/plugins/pictureflow/pictureflow.c
-@@ -4358,6 +4358,19 @@ static void show_track_list_loading(void)
+@@ -308,6 +308,8 @@ static inline pix_t pf_color_mix(int brightness)
+ 
+ #define EMPTY_SLIDE CACHE_PREFIX "/emptyslide.pfraw"
+ #define EMPTY_SLIDE_BMP PLUGIN_DEMOS_DIR "/pictureflow_emptyslide.bmp"
++#define EMBEDDED_ALBUMART_JPG_TMP CACHE_PREFIX "/embedded_albumart.jpg"
++#define EMBEDDED_ALBUMART_BMP_TMP CACHE_PREFIX "/embedded_albumart.bmp"
+ #define SPLASH_BMP PLUGIN_DEMOS_DIR "/pictureflow_splash.bmp"
+ 
+ /* Ordered Bayer dithering for 24-bit to RGB565 conversion */
+@@ -330,7 +332,7 @@ static const unsigned char pf_dither_table[16] =
+ #define ERROR_USER_ABORT    -4
+ 
+ /* current version for cover cache */
+-#define CACHE_VERSION 5
++#define CACHE_VERSION 6
+ #define CONFIG_VERSION 1
+ #define CONFIG_FILE "pictureflow.cfg"
+ #define INDEX_HDR "PFID"
+@@ -2142,6 +2144,66 @@ bool retrieve_id3(struct mp3entry *id3, const char* file)
+     return rb->get_metadata(id3, -1, file);
+ }
+ 
++static bool extract_embedded_albumart(const struct mp3entry *id3,
++                                      char *buf, int buflen)
++{
++    unsigned char copybuf[512];
++    unsigned long remaining;
++    const char *tmp;
++    int type;
++    int src = -1;
++    int dst = -1;
++    bool ok = false;
++
++    if (!id3->path[0] || !id3->has_embedded_albumart ||
++        id3->albumart.size == 0)
++        return false;
++
++    type = id3->albumart.type & AA_CLEAR_FLAGS_MASK;
++    if (type == AA_TYPE_JPG)
++        tmp = EMBEDDED_ALBUMART_JPG_TMP;
++    else if (type == AA_TYPE_BMP)
++        tmp = EMBEDDED_ALBUMART_BMP_TMP;
++    else
++        return false;
++
++    src = rb->open(id3->path, O_RDONLY);
++    if (src < 0 || rb->lseek(src, id3->albumart.pos, SEEK_SET) < 0)
++        goto out;
++
++    dst = rb->open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0666);
++    if (dst < 0)
++        goto out;
++
++    remaining = id3->albumart.size;
++    while (remaining > 0)
++    {
++        size_t amount = MIN(remaining, sizeof(copybuf));
++        ssize_t count = rb->read(src, copybuf, amount);
++        if (count <= 0 || rb->write(dst, copybuf, count) != count)
++            goto out;
++        remaining -= count;
++    }
++
++    rb->strlcpy(buf, tmp, buflen);
++    ok = true;
++
++out:
++    if (dst >= 0)
++        rb->close(dst);
++    if (src >= 0)
++        rb->close(src);
++    if (!ok)
++        rb->remove(tmp);
++    return ok;
++}
++
++static bool is_embedded_albumart_tmp(const char *file)
++{
++    return !rb->strcmp(file, EMBEDDED_ALBUMART_JPG_TMP) ||
++           !rb->strcmp(file, EMBEDDED_ALBUMART_BMP_TMP);
++}
++
+ /**
+   Determine filename of the album art for the given slide_index and
+   store the result in buf.
+@@ -2165,8 +2227,17 @@ static bool get_albumart_for_index_from_db(const int slide_index, char *buf,
+                                    pf_idx.album_index[slide_index].artist_seek);
+ 
+     ret = rb->tagcache_get_next(&tcs, tcs_buf, tcs_bufsz) &&
+-          retrieve_id3(&id3, tcs.result) &&
+-          search_albumart_files(&id3, ":", buf, buflen);
++          retrieve_id3(&id3, tcs.result);
++
++    if (ret)
++    {
++        ret = search_albumart_files(&id3, ":", buf, buflen);
++        if (!ret)
++        {
++            ret = rb->get_metadata(&id3, -1, tcs.result) &&
++                  extract_embedded_albumart(&id3, buf, buflen);
++        }
++    }
+ 
+     rb->tagcache_search_finish(&tcs);
+     return ret;
+@@ -2361,6 +2432,8 @@ static bool incremental_albumart_cache(bool verbose)
+ 
+     ret = read_image_file(aa_cache.file, &aa_cache.input_bmp,
+                           aa_cache.buf_sz, format, &format_transposed);
++    if (is_embedded_albumart_tmp(aa_cache.file))
++        rb->remove(aa_cache.file);
+     if (ret <= 0) {
+         if (verbose) {
+             rb->splashf(HZ, "Album art is bad: %s", get_album_name(idx));
+@@ -4358,6 +4431,19 @@ static void show_track_list_loading(void)
  /**
    Display the list of tracks
   */
@@ -22,7 +136,7 @@ index 394b586..a716722 100644
  static bool show_track_list(void)
  {
  #ifdef HAVE_LCD_COLOR
-@@ -4367,11 +4380,7 @@ static bool show_track_list(void)
+@@ -4367,11 +4453,7 @@ static bool show_track_list(void)
  #endif
      pf_clear_display();
      if ( center_slide.slide_index != pf_tracks.cur_idx ) {
@@ -35,7 +149,7 @@ index 394b586..a716722 100644
              show_track_list_loading();
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -4584,11 +4593,7 @@ static bool track_list_ready(void)
+@@ -4584,11 +4666,7 @@ static bool track_list_ready(void)
  {
      if (pf_state != pf_show_tracks)
      {
@@ -48,7 +162,7 @@ index 394b586..a716722 100644
              rb->splash(0, ID2P(LANG_WAIT));
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -5186,11 +5191,7 @@ static int pictureflow_main(void)
+@@ -5186,11 +5264,7 @@ static int pictureflow_main(void)
                  update_cover_in_animation();
                  render_all_slides();
                  if (center_slide.slide_index != pf_tracks.cur_idx
