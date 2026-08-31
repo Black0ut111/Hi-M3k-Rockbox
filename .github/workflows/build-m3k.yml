@@ -80,6 +80,7 @@ jobs:
           make -C build-m3k zip
           mkdir package
           unzip -q build-m3k/rockbox.zip -d package
+          rm -rf package/.rockbox/rocks/games
           mkdir -p theme-overlay/.rockbox/fonts
           unzip -p theme-assets/chinese-font.zip > theme-overlay/.rockbox/fonts/16-WenQangYi-Unibit.fnt
           cp -a theme-overlay/. package/
