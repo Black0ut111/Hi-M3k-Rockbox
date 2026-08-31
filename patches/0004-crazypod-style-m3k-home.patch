@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..2be2bc5 100644
+index e9942d9..9c9e8b8 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -67,20 +67,28 @@
@@ -31,7 +31,7 @@ index e9942d9..2be2bc5 100644
                                          * which is the current screen for the
                                          * rest of the code after load_screen
                                          * is called */
-@@ -710,20 +718,283 @@ static int get_selection(int last_screen)
+@@ -710,20 +718,325 @@ static int get_selection(int last_screen)
      {
          if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
              (root_menu__[i]->value == last_screen))
@@ -91,6 +91,46 @@ index e9942d9..2be2bc5 100644
 +    int width;
 +    lcd_getstringsize((const unsigned char *)text, &width, NULL);
 +    lcd_putsxy(x + (184 - width) / 2, y, text);
++}
++
++static void crazypod_m3k_scroll_text(const char *text, int x, int y,
++                                     int width, unsigned speed)
++{
++    struct viewport vp;
++    struct viewport *old_vp;
++    int text_width;
++    int offset = 0;
++
++    lcd_getstringsize((const unsigned char *)text, &text_width, NULL);
++    if (text_width > width)
++    {
++        int cycle = text_width + 32;
++        offset = ((current_tick / speed) * 2) % cycle;
++        if (offset > text_width - width + 20)
++            offset = 0;
++    }
++
++    viewport_set_defaults(&vp, SCREEN_MAIN);
++    vp.x = x;
++    vp.y = y;
++    vp.width = width;
++    vp.height = 16;
++    vp.fg_pattern = lcd_get_foreground();
++    vp.bg_pattern = lcd_get_background();
++    old_vp = lcd_set_viewport(&vp);
++    lcd_putsxy(-offset, 0, text);
++    lcd_set_viewport(old_vp);
++}
++
++static void crazypod_m3k_apply_theme(void)
++{
++    global_settings.bg_color = LCD_RGBPACK(12, 14, 23);
++    global_settings.fg_color = LCD_RGBPACK(225, 229, 240);
++    global_settings.lss_color = LCD_RGBPACK(231, 70, 86);
++    global_settings.lse_color = LCD_RGBPACK(160, 62, 128);
++    global_settings.lst_color = LCD_WHITE;
++    screens[SCREEN_MAIN].set_background(global_settings.bg_color);
++    screens[SCREEN_MAIN].set_foreground(global_settings.fg_color);
 +}
 +
 +static void crazypod_m3k_draw_icon(int selection, int x, int y)
@@ -167,7 +207,6 @@ index e9942d9..2be2bc5 100644
 +static void crazypod_m3k_draw_home(int selection, int offset)
 +{
 +    char status[32];
-+    char playing[64];
 +    int count = MENU_GET_COUNT(root_menu_.flags);
 +    int previous = (selection + count - 1) % count;
 +    int next = (selection + 1) % count;
@@ -200,15 +239,14 @@ index e9942d9..2be2bc5 100644
 +        const char *artist = id3->artist ? id3->artist : "Unknown artist";
 +        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
 +                       id3->length : 0;
-+        snprintf(playing, sizeof(playing), "%s %.22s",
-+                 (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||", title);
 +        lcd_set_foreground(LCD_RGBPACK(35, 40, 56));
 +        lcd_fillrect(12, 234, LCD_WIDTH - 24, 42);
 +        lcd_set_foreground(LCD_WHITE);
-+        lcd_putsxy(20, 239, playing);
++        lcd_putsxy(20, 239,
++                   (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||");
++        crazypod_m3k_scroll_text(title, 39, 239, LCD_WIDTH - 59, 3);
 +        lcd_set_foreground(LCD_RGBPACK(170, 178, 198));
-+        snprintf(playing, sizeof(playing), "%.28s", artist);
-+        lcd_putsxy(20, 256, playing);
++        crazypod_m3k_scroll_text(artist, 20, 256, LCD_WIDTH - 40, 4);
 +        lcd_set_foreground(LCD_RGBPACK(83, 91, 112));
 +        lcd_fillrect(12, 273, LCD_WIDTH - 24, 3);
 +        lcd_set_foreground(LCD_RGBPACK(245, 92, 110));
@@ -229,11 +267,13 @@ index e9942d9..2be2bc5 100644
 +
 +static void crazypod_m3k_animate(int selection, int direction)
 +{
-+    int start = direction > 0 ? 192 : -192;
-+    for (int frame = 5; frame >= 0; frame--)
++    static const unsigned char easing[] = {160, 104, 60, 28, 8, 0};
++    int sign = direction > 0 ? 1 : -1;
++
++    for (unsigned frame = 0; frame < ARRAYLEN(easing); frame++)
 +    {
-+        crazypod_m3k_draw_home(selection, start * frame / 6);
-+        sleep(HZ / 60 + 1);
++        crazypod_m3k_draw_home(selection, sign * easing[frame]);
++        sleep(HZ / 100 + 1);
 +    }
 +}
 +
@@ -241,6 +281,8 @@ index e9942d9..2be2bc5 100644
 +{
 +    int count = MENU_GET_COUNT(root_menu_.flags);
 +    int result = GO_TO_ROOT;
++
++    crazypod_m3k_apply_theme();
 +
 +#ifdef HAVE_ALBUMART
 +    struct dim aa_dim = {72, 72};
@@ -256,7 +298,7 @@ index e9942d9..2be2bc5 100644
 +    {
 +        int action;
 +        crazypod_m3k_draw_home(*selection, 0);
-+        action = get_action(CONTEXT_MAINMENU, TIMEOUT_BLOCK);
++        action = get_action(CONTEXT_MAINMENU, HZ / 8);
 +
 +        if (action == ACTION_STD_PREV || action == ACTION_STD_PREVREPEAT)
 +        {
@@ -315,7 +357,7 @@ index e9942d9..2be2bc5 100644
      if (screen <= GO_TO_ROOT)
          return screen;
      if (screen == old_previous)
-@@ -975,21 +1246,25 @@ void root_menu(void)
+@@ -975,21 +1288,25 @@ void root_menu(void)
              case MENU_SELECTED_EXIT:
                  /* fall through */
              case GO_TO_ROOT:
