@@ -1,5 +1,5 @@
 diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
-index 394b586..9426003 100644
+index 394b586..87c4e5c 100644
 --- a/apps/plugins/pictureflow/pictureflow.c
 +++ b/apps/plugins/pictureflow/pictureflow.c
 @@ -308,6 +308,8 @@ static inline pix_t pf_color_mix(int brightness)
@@ -162,7 +162,20 @@ index 394b586..9426003 100644
              rb->splash(0, ID2P(LANG_WAIT));
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -5186,11 +5264,7 @@ static int pictureflow_main(void)
+@@ -4889,6 +4967,12 @@ static bool init(void)
+     config_set_defaults(&pf_cfg); /* must appear before configfile_save */
+     configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
+ 
++#ifdef FIIO_M3K
++    pf_cfg.show_statusbar = false;
++    if (pf_cfg.num_slides > 3)
++        pf_cfg.num_slides = 3;
++#endif
++
+     /* Compute viewport and rendering layout based on show_statusbar setting */
+     if (pf_cfg.show_statusbar)
+     {
+@@ -5186,11 +5270,7 @@ static int pictureflow_main(void)
                  update_cover_in_animation();
                  render_all_slides();
                  if (center_slide.slide_index != pf_tracks.cur_idx
@@ -175,3 +188,4 @@ index 394b586..9426003 100644
                  {
                      create_track_index(center_slide.slide_index);
                      if (pf_tracks.count > 0)
+warning: in the working copy of 'apps/plugins/pictureflow/pictureflow.c', LF will be replaced by CRLF the next time Git touches it

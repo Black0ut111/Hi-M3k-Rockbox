@@ -80,6 +80,7 @@ jobs:
           make -C build-m3k zip
           mkdir package
           unzip -q build-m3k/rockbox.zip -d package
+          unzip -q theme-assets/chinese-font.zip -d theme-overlay
           cp -a theme-overlay/. package/
           (cd package && zip -qr ../rockpod-fiiom3k-alpha1.zip .rockbox)
           sha256sum rockpod-fiiom3k-alpha1.zip > SHA256SUMS.txt

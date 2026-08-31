@@ -1,7 +1,8 @@
+
 # CrazyThemify for FiiO M3K, portrait adaptation inspired by Themify 2
 %wd
 %Fl(2,16-WenQangYi-Unibit.fnt)
-%Fl(3,12-Adobe-Helvetica.fnt)
+%Fl(3,16-WenQangYi-Unibit.fnt)
 %V(0,0,240,320,-)%Vb(0c0e17)%Vf(e1e5f0)%VB
 %V(12,8,216,18,3)%al%ca:%cM%ar%bl%%
 %V(30,31,180,180,2)%acNO COVER
@@ -10,3 +11,4 @@
 %V(20,249,200,22,3)%ac%s%?ia<%ia|Unknown artist>
 %V(20,276,200,6,-)%pb(0,0,200,6,noborder)
 %V(18,288,204,22,3)%al%pc%ac%?mp<|PLAY|PAUSE|FF|REW>%ar%pt
+
