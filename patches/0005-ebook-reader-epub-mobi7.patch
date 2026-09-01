@@ -1,0 +1,466 @@
+diff --git a/apps/plugins/CATEGORIES b/apps/plugins/CATEGORIES
+index c9b1781..d84bd0c 100644
+--- a/apps/plugins/CATEGORIES
++++ b/apps/plugins/CATEGORIES
+@@ -192,6 +192,7 @@ test_viewports,apps
+ test_greylib_bitmap_scale,viewers
+ text_editor,apps
+ text_viewer,viewers
++ebook_reader,viewers
+ theme_remove,viewers
+ vbrfix,viewers
+ video,viewers
+diff --git a/apps/plugins/SUBDIRS b/apps/plugins/SUBDIRS
+index 215313d..4a83c7e 100644
+--- a/apps/plugins/SUBDIRS
++++ b/apps/plugins/SUBDIRS
+@@ -1,6 +1,7 @@
+ /* For all targets */
+ shortcuts
+ text_viewer
++ebook_reader
+ 
+ /* For various targets... */
+ 
+diff --git a/apps/plugins/viewers.config b/apps/plugins/viewers.config
+index d745a29..8c3fc1f 100644
+--- a/apps/plugins/viewers.config
++++ b/apps/plugins/viewers.config
+@@ -1,5 +1,7 @@
+ ch8,viewers/chip8,0
+ txt,viewers/text_viewer,1
++epub,viewers/ebook_reader,1
++mobi,viewers/ebook_reader,1
+ txt,apps/text_editor,2
+ txt,viewers/sort,-
+ txt,viewers/speedread,1
+warning: in the working copy of 'apps/plugins/CATEGORIES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/plugins/SUBDIRS', LF will be replaced by CRLF the next time Git touches it
+diff --git a/apps/plugins/ebook_reader/SOURCES b/apps/plugins/ebook_reader/SOURCES
+new file mode 100644
+index 0000000..ffd2402
+--- /dev/null
++++ b/apps/plugins/ebook_reader/SOURCES
+@@ -0,0 +1,2 @@
++ebook_reader.c
++../imageviewer/png/tinflate.c
+diff --git a/apps/plugins/ebook_reader/ebook_reader.make b/apps/plugins/ebook_reader/ebook_reader.make
+new file mode 100644
+index 0000000..1a6a689
+--- /dev/null
++++ b/apps/plugins/ebook_reader/ebook_reader.make
+@@ -0,0 +1,10 @@
++EBOOK_READER_SRCDIR := $(APPSDIR)/plugins/ebook_reader
++EBOOK_READER_BUILDDIR := $(BUILDDIR)/apps/plugins/ebook_reader
++
++EBOOK_READER_SRC := $(call preprocess, $(EBOOK_READER_SRCDIR)/SOURCES)
++EBOOK_READER_OBJ := $(call c2obj, $(EBOOK_READER_SRC))
++
++OTHER_SRC += $(EBOOK_READER_SRC)
++ROCKS += $(EBOOK_READER_BUILDDIR)/ebook_reader.rock
++
++$(EBOOK_READER_BUILDDIR)/ebook_reader.rock: $(EBOOK_READER_OBJ)
+diff --git a/apps/plugins/ebook_reader/ebook_reader.c b/apps/plugins/ebook_reader/ebook_reader.c
+new file mode 100644
+index 0000000..8a65541
+--- /dev/null
++++ b/apps/plugins/ebook_reader/ebook_reader.c
+@@ -0,0 +1,398 @@
++#include "plugin.h"
++#include "../imageviewer/png/tinf.h"
++
++#define EBOOK_CACHE_DIR ROCKBOX_DIR "/rocks/data/ebook_reader"
++#define EBOOK_TEXT_VIEWER VIEWERS_DIR "/text_viewer.rock"
++#define ZIP_EOCD 0x06054b50
++#define ZIP_CENTRAL 0x02014b50
++#define ZIP_LOCAL 0x04034b50
++
++static unsigned char *workbuf;
++static size_t workbuf_size;
++
++static uint16_t le16(const unsigned char *p)
++{
++    return p[0] | ((uint16_t)p[1] << 8);
++}
++
++static uint32_t le32(const unsigned char *p)
++{
++    return p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
++           ((uint32_t)p[3] << 24);
++}
++
++static uint16_t be16(const unsigned char *p)
++{
++    return ((uint16_t)p[0] << 8) | p[1];
++}
++
++static uint32_t be32(const unsigned char *p)
++{
++    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
++           ((uint32_t)p[2] << 8) | p[3];
++}
++
++static bool read_at(int fd, off_t pos, void *buf, size_t len)
++{
++    return rb->lseek(fd, pos, SEEK_SET) >= 0 &&
++           rb->read(fd, buf, len) == (ssize_t)len;
++}
++
++static uint32_t path_hash(const char *path)
++{
++    uint32_t hash = 2166136261u;
++    while (*path)
++    {
++        hash ^= (unsigned char)*path++;
++        hash *= 16777619u;
++    }
++    return hash;
++}
++
++static bool has_ext(const char *name, const char *ext)
++{
++    size_t nl = rb->strlen(name);
++    size_t el = rb->strlen(ext);
++    return nl >= el && !rb->strcasecmp(name + nl - el, ext);
++}
++
++struct html_filter
++{
++    bool in_tag;
++    bool pending_space;
++    bool last_newline;
++};
++
++static bool write_byte(int fd, unsigned char c)
++{
++    return rb->write(fd, &c, 1) == 1;
++}
++
++static bool html_write_text(int out, const unsigned char *src, size_t len,
++                            struct html_filter *filter)
++{
++    size_t i;
++    for (i = 0; i < len; i++)
++    {
++        unsigned char c = src[i];
++        if (filter->in_tag)
++        {
++            if (c == '>')
++            {
++                filter->in_tag = false;
++                filter->pending_space = true;
++            }
++            continue;
++        }
++        if (c == '<')
++        {
++            filter->in_tag = true;
++            continue;
++        }
++        if (c == '&')
++        {
++            if (i + 5 < len && !rb->strncasecmp((const char *)&src[i], "&nbsp;", 6))
++            {
++                filter->pending_space = true;
++                i += 5;
++                continue;
++            }
++            if (i + 4 < len && !rb->strncasecmp((const char *)&src[i], "&amp;", 5))
++            {
++                c = '&';
++                i += 4;
++            }
++            else if (i + 3 < len && !rb->strncasecmp((const char *)&src[i], "&lt;", 4))
++            {
++                c = '<';
++                i += 3;
++            }
++            else if (i + 3 < len && !rb->strncasecmp((const char *)&src[i], "&gt;", 4))
++            {
++                c = '>';
++                i += 3;
++            }
++            else if (i + 5 < len && !rb->strncasecmp((const char *)&src[i], "&quot;", 6))
++            {
++                c = '"';
++                i += 5;
++            }
++        }
++        if (c == '\r' || c == '\n' || c == '\t' || c == ' ')
++        {
++            filter->pending_space = true;
++            continue;
++        }
++        if (filter->pending_space)
++        {
++            if (!filter->last_newline && !write_byte(out, ' '))
++                return false;
++            filter->pending_space = false;
++        }
++        if (!write_byte(out, c))
++            return false;
++        filter->last_newline = false;
++    }
++    return true;
++}
++
++static bool chapter_break(int out, struct html_filter *filter)
++{
++    static const char separator[] = "\n\n";
++    filter->pending_space = false;
++    filter->last_newline = true;
++    return rb->write(out, separator, sizeof(separator) - 1) ==
++           (ssize_t)(sizeof(separator) - 1);
++}
++
++static bool zip_find_directory(int fd, off_t size, uint32_t *offset,
++                               uint16_t *entries)
++{
++    size_t tail = MIN((off_t)65557, size);
++    unsigned char *buf;
++    ssize_t i;
++    if (tail > workbuf_size)
++        return false;
++    buf = workbuf;
++    if (!read_at(fd, size - tail, buf, tail))
++        return false;
++    for (i = (ssize_t)tail - 22; i >= 0; i--)
++    {
++        if (le32(buf + i) == ZIP_EOCD)
++        {
++            *entries = le16(buf + i + 10);
++            *offset = le32(buf + i + 16);
++            return true;
++        }
++    }
++    return false;
++}
++
++static bool epub_extract_entry(int fd, int out, uint32_t local_offset,
++                               uint16_t method, uint32_t compressed,
++                               uint32_t unpacked, struct html_filter *filter)
++{
++    unsigned char header[30];
++    unsigned char *src;
++    unsigned char *dst;
++    uint16_t name_len;
++    uint16_t extra_len;
++    unsigned int actual;
++    if (!read_at(fd, local_offset, header, sizeof(header)) ||
++        le32(header) != ZIP_LOCAL || unpacked == 0)
++        return false;
++    if ((uint64_t)compressed + unpacked > workbuf_size)
++        return false;
++    name_len = le16(header + 26);
++    extra_len = le16(header + 28);
++    src = workbuf;
++    dst = workbuf + compressed;
++    if (!read_at(fd, local_offset + 30 + name_len + extra_len,
++                 src, compressed))
++        return false;
++    if (method == 0)
++    {
++        dst = src;
++        actual = compressed;
++    }
++    else if (method == 8)
++    {
++        actual = unpacked;
++        if (tinf_uncompress(dst, &actual, src, compressed) != TINF_OK)
++            return false;
++    }
++    else
++        return false;
++    return html_write_text(out, dst, actual, filter) &&
++           chapter_break(out, filter);
++}
++
++static bool convert_epub(const char *path, const char *cache)
++{
++    unsigned char header[46];
++    char name[MAX_PATH];
++    struct html_filter filter = { false, false, true };
++    uint32_t directory;
++    uint16_t entries;
++    int fd = rb->open(path, O_RDONLY);
++    int out = -1;
++    off_t size;
++    uint16_t i;
++    bool any = false;
++    if (fd < 0)
++        return false;
++    size = rb->filesize(fd);
++    if (!zip_find_directory(fd, size, &directory, &entries))
++        goto done;
++    out = rb->open(cache, O_WRONLY | O_CREAT | O_TRUNC, 0666);
++    if (out < 0)
++        goto done;
++    for (i = 0; i < entries; i++)
++    {
++        uint16_t name_len, extra_len, comment_len, method;
++        uint32_t compressed, unpacked, local_offset;
++        if (!read_at(fd, directory, header, sizeof(header)) ||
++            le32(header) != ZIP_CENTRAL)
++            break;
++        method = le16(header + 10);
++        compressed = le32(header + 20);
++        unpacked = le32(header + 24);
++        name_len = le16(header + 28);
++        extra_len = le16(header + 30);
++        comment_len = le16(header + 32);
++        local_offset = le32(header + 42);
++        if (name_len < sizeof(name) &&
++            read_at(fd, directory + 46, name, name_len))
++        {
++            name[name_len] = 0;
++            if (has_ext(name, ".xhtml") || has_ext(name, ".html") ||
++                has_ext(name, ".htm"))
++            {
++                if (epub_extract_entry(fd, out, local_offset, method,
++                                       compressed, unpacked, &filter))
++                    any = true;
++            }
++        }
++        directory += 46 + name_len + extra_len + comment_len;
++    }
++done:
++    if (out >= 0)
++        rb->close(out);
++    rb->close(fd);
++    if (!any)
++        rb->remove(cache);
++    return any;
++}
++
++static size_t palmdoc_unpack(unsigned char *dst, size_t capacity,
++                             const unsigned char *src, size_t len)
++{
++    size_t si = 0, di = 0;
++    while (si < len && di < capacity)
++    {
++        unsigned char c = src[si++];
++        if (c == 0 || (c >= 9 && c <= 0x7f))
++            dst[di++] = c;
++        else if (c <= 8)
++        {
++            while (c-- && si < len && di < capacity)
++                dst[di++] = src[si++];
++        }
++        else if (c >= 0xc0)
++        {
++            if (di + 2 > capacity)
++                break;
++            dst[di++] = ' ';
++            dst[di++] = c ^ 0x80;
++        }
++        else
++        {
++            uint16_t pair;
++            size_t distance, count;
++            if (si >= len)
++                break;
++            pair = ((uint16_t)c << 8) | src[si++];
++            distance = (pair >> 3) & 0x7ff;
++            count = (pair & 7) + 3;
++            if (!distance || distance > di)
++                break;
++            while (count-- && di < capacity)
++            {
++                dst[di] = dst[di - distance];
++                di++;
++            }
++        }
++    }
++    return di;
++}
++
++static bool convert_mobi(const char *path, const char *cache)
++{
++    unsigned char pdb[78];
++    unsigned char doc[32];
++    struct html_filter filter = { false, false, true };
++    int fd = rb->open(path, O_RDONLY);
++    int out = -1;
++    uint16_t records, compression, text_records, encryption;
++    uint16_t i;
++    bool any = false;
++    if (fd < 0 || !read_at(fd, 0, pdb, sizeof(pdb)))
++        goto done;
++    records = be16(pdb + 76);
++    if (!records || (size_t)records * 8 > workbuf_size / 4 ||
++        !read_at(fd, 78, workbuf, records * 8) ||
++        !read_at(fd, be32(workbuf), doc, sizeof(doc)))
++        goto done;
++    compression = be16(doc);
++    text_records = MIN(be16(doc + 8), records - 1);
++    encryption = be16(doc + 12);
++    if ((compression != 1 && compression != 2) || encryption != 0)
++        goto done;
++    out = rb->open(cache, O_WRONLY | O_CREAT | O_TRUNC, 0666);
++    if (out < 0)
++        goto done;
++    for (i = 1; i <= text_records; i++)
++    {
++        uint32_t start = be32(workbuf + i * 8);
++        uint32_t end = i + 1 < records ? be32(workbuf + (i + 1) * 8) :
++                       rb->filesize(fd);
++        size_t packed = end - start;
++        unsigned char *src = workbuf + records * 8;
++        unsigned char *dst = src + packed;
++        size_t capacity = workbuf_size - records * 8 - packed;
++        size_t actual;
++        if (end <= start || packed > capacity / 2 ||
++            !read_at(fd, start, src, packed))
++            break;
++        if (compression == 1)
++        {
++            dst = src;
++            actual = packed;
++        }
++        else
++            actual = palmdoc_unpack(dst, capacity - packed, src, packed);
++        if (!actual || !html_write_text(out, dst, actual, &filter))
++            break;
++        any = true;
++    }
++    if (any)
++        chapter_break(out, &filter);
++done:
++    if (out >= 0)
++        rb->close(out);
++    if (fd >= 0)
++        rb->close(fd);
++    if (!any)
++        rb->remove(cache);
++    return any;
++}
++
++enum plugin_status plugin_start(const void *parameter)
++{
++    const char *path = parameter;
++    char cache[MAX_PATH];
++    bool ok;
++    if (!path)
++        return PLUGIN_ERROR;
++    workbuf = rb->plugin_get_audio_buffer(&workbuf_size);
++    if (!workbuf || workbuf_size < 128 * 1024)
++    {
++        rb->splash(HZ * 2, "Not enough memory");
++        return PLUGIN_ERROR;
++    }
++    rb->mkdir(ROCKBOX_DIR "/rocks/data");
++    rb->mkdir(EBOOK_CACHE_DIR);
++    rb->snprintf(cache, sizeof(cache), EBOOK_CACHE_DIR "/v1-%08lx.txt",
++                 (unsigned long)path_hash(path));
++    if (rb->file_exists(cache))
++        return rb->plugin_open(EBOOK_TEXT_VIEWER, cache);
++    rb->splash(0, "Preparing book...");
++    ok = has_ext(path, ".epub") ? convert_epub(path, cache) :
++         has_ext(path, ".mobi") ? convert_mobi(path, cache) : false;
++    if (!ok)
++    {
++        rb->splash(HZ * 3, "Unsupported, encrypted, or too large");
++        return PLUGIN_ERROR;
++    }
++    return rb->plugin_open(EBOOK_TEXT_VIEWER, cache);
++}
