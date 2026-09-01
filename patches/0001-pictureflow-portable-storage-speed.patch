@@ -1,5 +1,5 @@
 diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
-index 394b586..9b1bfa5 100644
+index 394b586..17ce7c9 100644
 --- a/apps/plugins/pictureflow/pictureflow.c
 +++ b/apps/plugins/pictureflow/pictureflow.c
 @@ -37,6 +37,9 @@
@@ -188,7 +188,27 @@ index 394b586..9b1bfa5 100644
              rb->splash(0, ID2P(LANG_WAIT));
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -4889,6 +4979,12 @@ static bool init(void)
+@@ -4850,11 +4940,14 @@ static void draw_album_text(void)
+             mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
+ 
+         artisttxt = get_album_artist(albumtxt_index);
+-        if (album_changed)
+-            set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
+-        artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
+-        int y_offset = char_height * 3 / 4;
+-        mylcd_putsxy(artisttxt_x, albumtxt_y + y_offset, artisttxt);
++        if (rb->strcmp(artisttxt, UNTAGGED))
++        {
++            if (album_changed)
++                set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
++            artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
++            int y_offset = char_height * 3 / 4;
++            mylcd_putsxy(artisttxt_x, albumtxt_y + y_offset, artisttxt);
++        }
+     } else {
+         mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
+     }
+@@ -4889,6 +4982,12 @@ static bool init(void)
      config_set_defaults(&pf_cfg); /* must appear before configfile_save */
      configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
  
@@ -201,7 +221,7 @@ index 394b586..9b1bfa5 100644
      /* Compute viewport and rendering layout based on show_statusbar setting */
      if (pf_cfg.show_statusbar)
      {
-@@ -4961,7 +5057,15 @@ static bool init(void)
+@@ -4961,7 +5060,15 @@ static bool init(void)
      pf_idx.buf = buf;
      pf_idx.buf_sz = buf_size;
  
@@ -217,7 +237,7 @@ index 394b586..9b1bfa5 100644
  
      if (!rb->dir_exists(CACHE_PREFIX))
      {
-@@ -5186,11 +5290,7 @@ static int pictureflow_main(void)
+@@ -5186,11 +5293,7 @@ static int pictureflow_main(void)
                  update_cover_in_animation();
                  render_all_slides();
                  if (center_slide.slide_index != pf_tracks.cur_idx
@@ -230,4 +250,3 @@ index 394b586..9b1bfa5 100644
                  {
                      create_track_index(center_slide.slide_index);
                      if (pf_tracks.count > 0)
-warning: in the working copy of 'apps/plugins/pictureflow/pictureflow.c', LF will be replaced by CRLF the next time Git touches it

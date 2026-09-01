@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..0405f38 100644
+index e9942d9..3f3e965 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -74,6 +74,11 @@
@@ -14,7 +14,7 @@ index e9942d9..0405f38 100644
  
  struct root_items {
      int (*function)(void* param);
-@@ -717,6 +722,307 @@ static int get_selection(int last_screen)
+@@ -717,6 +722,309 @@ static int get_selection(int last_screen)
      return 0;
  }
  
@@ -137,12 +137,14 @@ index e9942d9..0405f38 100644
 +        const char *artist = id3->artist ? id3->artist : "Unknown artist";
 +        int progress = id3->length > 0 ? id3->elapsed * (LCD_WIDTH - 24) /
 +                       id3->length : 0;
++        lcd_set_drawmode(DRMODE_FG);
 +        lcd_set_foreground(LCD_WHITE);
 +        lcd_putsxy(20, 239,
 +                   (audio_status() & AUDIO_STATUS_PAUSE) ? ">" : "||");
 +        crazypod_m3k_scroll_text(title, 39, 239, LCD_WIDTH - 59, 3);
 +        lcd_set_foreground(LCD_RGBPACK(170, 178, 198));
 +        crazypod_m3k_scroll_text(artist, 20, 256, LCD_WIDTH - 40, 4);
++        lcd_set_drawmode(DRMODE_SOLID);
 +        lcd_set_foreground(LCD_RGBPACK(83, 91, 112));
 +        lcd_fillrect(12, 273, LCD_WIDTH - 24, 3);
 +        lcd_set_foreground(LCD_RGBPACK(245, 92, 110));
@@ -197,8 +199,7 @@ index e9942d9..0405f38 100644
 +        lcd_clear_display();
 +    }
 +
-+    lcd_set_foreground(LCD_BLACK);
-+    lcd_putsxy(13, 10, "Hi-M3K");
++    lcd_set_drawmode(DRMODE_FG);
 +    lcd_set_foreground(LCD_RGBPACK(225, 229, 240));
 +    lcd_putsxy(12, 9, "Hi-M3K");
 +    snprintf(status, sizeof(status), "%02d:%02d  %d%%", now->tm_hour,
@@ -208,6 +209,7 @@ index e9942d9..0405f38 100644
 +        lcd_getstringsize((const unsigned char *)status, &width, NULL);
 +        lcd_putsxy(LCD_WIDTH - width - 12, 9, status);
 +    }
++    lcd_set_drawmode(DRMODE_SOLID);
 +
 +    crazypod_m3k_draw_menu_icon(previous, 72 - 128 + offset, 76);
 +    crazypod_m3k_draw_menu_icon(next, 72 + 128 + offset, 76);
@@ -322,7 +324,7 @@ index e9942d9..0405f38 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-@@ -982,7 +1288,11 @@ void root_menu(void)
+@@ -982,7 +1290,11 @@ void root_menu(void)
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  
