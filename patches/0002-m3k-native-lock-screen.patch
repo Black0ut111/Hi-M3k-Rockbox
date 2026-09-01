@@ -1,6 +1,6 @@
 
 diff --git a/apps/gui/skin_engine/skin_render.c b/apps/gui/skin_engine/skin_render.c
-index ad146d9..09a07ff 100644
+index ad146d9..0be9aa6 100644
 --- a/apps/gui/skin_engine/skin_render.c
 +++ b/apps/gui/skin_engine/skin_render.c
 @@ -52,6 +52,14 @@
@@ -18,7 +18,7 @@ index ad146d9..09a07ff 100644
  
  #define MAX_LINE 1024
  
-@@ -860,6 +868,86 @@ void skin_render_viewport(struct skin_element* viewport, struct gui_wps *gwps,
+@@ -860,6 +868,88 @@ void skin_render_viewport(struct skin_element* viewport, struct gui_wps *gwps,
  static bool inhibit_flush = false;
  static bool pending_full_update = false;
  
@@ -78,17 +78,19 @@ index ad146d9..09a07ff 100644
 +    display->putsxy((LCD_WIDTH - width) / 2, 22,
 +                    (const unsigned char *)"L O C K E D");
 +
-+    display->set_foreground(LCD_RGBPACK(0x0b, 0x55, 0x9b));
++    display->set_foreground(LCD_BLACK);
 +    display->fillrect(0, 236, LCD_WIDTH, 84);
 +
 +    snprintf(buf, sizeof(buf), "%02d:%02d", now->tm_hour, now->tm_min);
 +    display->set_foreground(LCD_WHITE);
++    display->set_drawmode(DRMODE_FG);
 +    display->getstringsize((const unsigned char *)buf, &width, &height);
 +    display->putsxy(14, 250, (const unsigned char *)buf);
 +
 +    snprintf(buf, sizeof(buf), "%d%%", battery_level());
 +    display->getstringsize((const unsigned char *)buf, &width, &height);
 +    display->putsxy(LCD_WIDTH - width - 14, 250, (const unsigned char *)buf);
++    display->set_drawmode(DRMODE_SOLID);
 +
 +    if (id3)
 +    {
@@ -105,7 +107,7 @@ index ad146d9..09a07ff 100644
  void skin_render_inhibit_flush(bool inhibit)
  {
      inhibit_flush = inhibit;
-@@ -1013,6 +1101,9 @@ void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
+@@ -1013,6 +1103,9 @@ void skin_render(struct gui_wps *gwps, unsigned refresh_mode)
      }
      /* Restore the default viewport */
      display->set_viewport_ex(NULL, VP_FLAG_VP_SET_CLEAN);
@@ -115,4 +117,5 @@ index ad146d9..09a07ff 100644
      if (!inhibit_flush)
          display->update();
      else
+warning: in the working copy of 'apps/gui/skin_engine/skin_render.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'apps/gui/skin_engine/skin_render.c', LF will be replaced by CRLF the next time Git touches it
