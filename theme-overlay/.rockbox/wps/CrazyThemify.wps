@@ -1,34 +1,16 @@
 
+
 # CrazyThemify for FiiO M3K, portrait adaptation inspired by Themify 2
-%we
+%wd
 %Fl(2,16-WenQangYi-Unibit.fnt)
 %Fl(3,16-WenQangYi-Unibit.fnt)
-%?mh<|%Vd(wbg)%Vd(wtime)%Vd(wempty)%Vd(wart)%Vd(wtitle)%Vd(wartist)%Vd(wprogress)%Vd(wfooter)>
+%V(0,0,240,320,-)%Vb(0c0e17)%Vf(e1e5f0)%VB
+%V(12,8,216,18,3)%al%ca:%cM%ar%bl%%
+%V(30,31,180,180,2)%acNO COVER
+%V(30,31,180,180,-)%Cl(0,0,180,180,c,c)%Cd
+%V(16,220,208,28,2)%ac%s%?it<%it|%fn>
+%V(20,249,200,22,3)%ac%s%?ia<%ia|Unknown artist>
+%V(20,276,200,6,-)%pb(0,0,200,6,noborder)
+%V(18,288,204,22,3)%al%pc%ac%?mp<|PLAY|PAUSE|FF|REW>%ar%pt
 
-%Vl(wbg,0,0,240,320,-)
-%Vb(0c0e17)
-%Vf(e1e5f0)
-%VB
-
-%Vl(wtime,12,8,216,18,3)
-%al%ca:%cM%ar%bl%%
-
-%Vl(wempty,30,31,180,180,2)
-%acNO COVER
-
-%Vl(wart,30,31,180,180,-)
-%Cl(0,0,180,180,c,c)
-%Cd
-
-%Vl(wtitle,16,220,208,28,2)
-%ac%s%?it<%it|%fn>
-
-%Vl(wartist,20,249,200,22,3)
-%ac%s%?ia<%ia|Unknown artist>
-
-%Vl(wprogress,20,276,200,6,-)
-%pb(0,0,200,6,noborder)
-
-%Vl(wfooter,18,288,204,22,3)
-%al%pc%ac%?mp<|PLAY|PAUSE|FF|REW>%ar%pt
 

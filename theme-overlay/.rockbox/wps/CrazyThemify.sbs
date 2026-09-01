@@ -1,65 +1,10 @@
 
+
 # CrazyThemify secondary screens for FiiO M3K
 %Fl(2,16-WenQangYi-Unibit.fnt)
 %Fl(3,16-WenQangYi-Unibit.fnt)
 %X(/.rockbox/backdrops/CrazyPod.bmp)
+%V(0,0,240,320,-)%Vf(e1e5f0)%VB
+%Vi(-,8,8,224,304,3)
 
-%V(0,0,240,320,-)
-%Vf(e1e5f0)
-%VB
-
-%?mh<%VI(h)|%VI(m)>
-%?mh<%Vd(lbg)%Vd(lhead)%Vd(lclock)%Vd(ldate)%?if(%mp, >, 1)<%Vd(ltrack)%Vd(lartist)%Vd(lelapsed)%Vd(lprogress)%Vd(lremain)>|>|>
-
-%Vi(m,8,8,224,304,3)
-%Vf(e1e5f0)
-%VB
-
-%Vi(h,0,0,1,1,-)
-%Vf(181418)
-%Vb(181418)
-
-%Vl(lbg,0,0,240,320,-)
-%Vb(181418)
-%dr(0,0,240,320,181418)
-
-%Vl(lhead,16,18,208,20,2)
-%Vf(908c98)
-%Vb(181418)
-%acL O C K E D
-
-%Vl(lclock,0,62,240,42,3)
-%Vf(d8dce0)
-%Vb(181418)
-%ac%?cf<%cH|%cl>:%cM
-
-%Vl(ldate,0,112,240,22,2)
-%Vf(908c98)
-%Vb(181418)
-%ac%ca %cb %cd
-
-%Vl(ltrack,18,210,204,24,3)
-%Vf(d8dce0)
-%Vb(202028)
-%s%ac%?it<%it|%fn>
-
-%Vl(lartist,18,236,204,20,2)
-%Vf(908c98)
-%Vb(202028)
-%s%ac%?ia<%ia|Unknown artist>
-
-%Vl(lelapsed,14,279,42,18,2)
-%Vf(706c78)
-%Vb(202028)
-%al%pc
-
-%Vl(lprogress,60,286,120,4,-)
-%Vf(b8acc8)
-%Vb(404048)
-%pb(0,0,120,4,noborder)
-
-%Vl(lremain,184,279,42,18,2)
-%Vf(706c78)
-%Vb(202028)
-%ar%pt
 
