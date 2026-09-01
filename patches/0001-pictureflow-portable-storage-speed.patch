@@ -1,5 +1,5 @@
 diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
-index 394b586..34d97c2 100644
+index 394b586..9b1bfa5 100644
 --- a/apps/plugins/pictureflow/pictureflow.c
 +++ b/apps/plugins/pictureflow/pictureflow.c
 @@ -37,6 +37,9 @@
@@ -201,7 +201,7 @@ index 394b586..34d97c2 100644
      /* Compute viewport and rendering layout based on show_statusbar setting */
      if (pf_cfg.show_statusbar)
      {
-@@ -4961,7 +5057,14 @@ static bool init(void)
+@@ -4961,7 +5057,15 @@ static bool init(void)
      pf_idx.buf = buf;
      pf_idx.buf_sz = buf_size;
  
@@ -209,6 +209,7 @@ index 394b586..34d97c2 100644
 +    pf_font = rb->font_load("/.rockbox/fonts/16-WenQangYi-Unibit.fnt");
 +    if (pf_font < 0)
 +        pf_font = FONT_UI;
++    pf_vp.font = pf_font;
 +    rb->lcd_setfont(pf_font);
 +#else
      rb->lcd_setfont(FONT_UI);
@@ -216,7 +217,7 @@ index 394b586..34d97c2 100644
  
      if (!rb->dir_exists(CACHE_PREFIX))
      {
-@@ -5186,11 +5289,7 @@ static int pictureflow_main(void)
+@@ -5186,11 +5290,7 @@ static int pictureflow_main(void)
                  update_cover_in_animation();
                  render_all_slides();
                  if (center_slide.slide_index != pf_tracks.cur_idx
@@ -229,3 +230,4 @@ index 394b586..34d97c2 100644
                  {
                      create_track_index(center_slide.slide_index);
                      if (pf_tracks.count > 0)
+warning: in the working copy of 'apps/plugins/pictureflow/pictureflow.c', LF will be replaced by CRLF the next time Git touches it
