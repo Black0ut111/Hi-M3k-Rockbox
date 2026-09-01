@@ -1,6 +1,6 @@
 
 diff --git a/apps/gui/skin_engine/skin_render.c b/apps/gui/skin_engine/skin_render.c
-index ad146d9..b791fc1 100644
+index ad146d9..24bc785 100644
 --- a/apps/gui/skin_engine/skin_render.c
 +++ b/apps/gui/skin_engine/skin_render.c
 @@ -52,6 +52,12 @@
@@ -34,7 +34,7 @@ index ad146d9..b791fc1 100644
 +
 +    display->set_viewport(NULL);
 +    display->scroll_stop();
-+    display->setfont(FONT_UI);
++    display->setfont(display->getuifont());
 +    display->set_background(LCD_RGBPACK(0x18, 0x14, 0x18));
 +    display->set_foreground(LCD_RGBPACK(0xd8, 0xdc, 0xe0));
 +    display->clear_display();
@@ -101,4 +101,5 @@ index ad146d9..b791fc1 100644
      if (!inhibit_flush)
          display->update();
      else
+warning: in the working copy of 'apps/gui/skin_engine/skin_render.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'apps/gui/skin_engine/skin_render.c', LF will be replaced by CRLF the next time Git touches it
