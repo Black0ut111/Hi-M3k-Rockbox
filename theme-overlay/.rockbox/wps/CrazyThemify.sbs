@@ -4,6 +4,10 @@
 %Fl(3,16-WenQangYi-Unibit.fnt)
 %X(/.rockbox/backdrops/CrazyPod.bmp)
 
+%V(0,0,240,320,-)
+%Vf(e1e5f0)
+%VB
+
 %?mh<%VI(h)|%VI(m)>
 %?mh<%Vd(lbg)%Vd(lhead)%Vd(lclock)%Vd(ldate)%?if(%mp, >, 1)<%Vd(ltrack)%Vd(lartist)%Vd(lelapsed)%Vd(lprogress)%Vd(lremain)>|>|>
 
