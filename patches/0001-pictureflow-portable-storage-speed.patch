@@ -1,8 +1,18 @@
 diff --git a/apps/plugins/pictureflow/pictureflow.c b/apps/plugins/pictureflow/pictureflow.c
-index 394b586..87c4e5c 100644
+index 394b586..34d97c2 100644
 --- a/apps/plugins/pictureflow/pictureflow.c
 +++ b/apps/plugins/pictureflow/pictureflow.c
-@@ -308,6 +308,8 @@ static inline pix_t pf_color_mix(int brightness)
+@@ -37,6 +37,9 @@
+ 
+ /******************************* Globals ***********************************/
+ static fb_data *lcd_fb;
++#ifdef FIIO_M3K
++static int pf_font = FONT_UI;
++#endif
+ 
+ /*
+  *  Targets which use plugin_get_audio_buffer() can't have playback from
+@@ -308,6 +311,8 @@ static inline pix_t pf_color_mix(int brightness)
  
  #define EMPTY_SLIDE CACHE_PREFIX "/emptyslide.pfraw"
  #define EMPTY_SLIDE_BMP PLUGIN_DEMOS_DIR "/pictureflow_emptyslide.bmp"
@@ -11,7 +21,7 @@ index 394b586..87c4e5c 100644
  #define SPLASH_BMP PLUGIN_DEMOS_DIR "/pictureflow_splash.bmp"
  
  /* Ordered Bayer dithering for 24-bit to RGB565 conversion */
-@@ -330,7 +332,7 @@ static const unsigned char pf_dither_table[16] =
+@@ -330,7 +335,7 @@ static const unsigned char pf_dither_table[16] =
  #define ERROR_USER_ABORT    -4
  
  /* current version for cover cache */
@@ -20,7 +30,7 @@ index 394b586..87c4e5c 100644
  #define CONFIG_VERSION 1
  #define CONFIG_FILE "pictureflow.cfg"
  #define INDEX_HDR "PFID"
-@@ -2142,6 +2144,66 @@ bool retrieve_id3(struct mp3entry *id3, const char* file)
+@@ -2142,6 +2147,66 @@ bool retrieve_id3(struct mp3entry *id3, const char* file)
      return rb->get_metadata(id3, -1, file);
  }
  
@@ -87,7 +97,7 @@ index 394b586..87c4e5c 100644
  /**
    Determine filename of the album art for the given slide_index and
    store the result in buf.
-@@ -2165,8 +2227,17 @@ static bool get_albumart_for_index_from_db(const int slide_index, char *buf,
+@@ -2165,8 +2230,17 @@ static bool get_albumart_for_index_from_db(const int slide_index, char *buf,
                                     pf_idx.album_index[slide_index].artist_seek);
  
      ret = rb->tagcache_get_next(&tcs, tcs_buf, tcs_bufsz) &&
@@ -107,7 +117,7 @@ index 394b586..87c4e5c 100644
  
      rb->tagcache_search_finish(&tcs);
      return ret;
-@@ -2361,6 +2432,8 @@ static bool incremental_albumart_cache(bool verbose)
+@@ -2361,6 +2435,8 @@ static bool incremental_albumart_cache(bool verbose)
  
      ret = read_image_file(aa_cache.file, &aa_cache.input_bmp,
                            aa_cache.buf_sz, format, &format_transposed);
@@ -116,7 +126,23 @@ index 394b586..87c4e5c 100644
      if (ret <= 0) {
          if (verbose) {
              rb->splashf(HZ, "Album art is bad: %s", get_album_name(idx));
-@@ -4358,6 +4431,19 @@ static void show_track_list_loading(void)
+@@ -3791,6 +3867,15 @@ static void cleanup(void)
+ #ifdef USEGSLIB
+     grey_release();
+ #endif
++
++#ifdef FIIO_M3K
++    if (pf_font != FONT_UI)
++    {
++        rb->lcd_setfont(FONT_UI);
++        rb->font_unload(pf_font);
++        pf_font = FONT_UI;
++    }
++#endif
+ }
+ 
+ static void skip_animation_to_show_tracks(void);
+@@ -4358,6 +4443,19 @@ static void show_track_list_loading(void)
  /**
    Display the list of tracks
   */
@@ -136,7 +162,7 @@ index 394b586..87c4e5c 100644
  static bool show_track_list(void)
  {
  #ifdef HAVE_LCD_COLOR
-@@ -4367,11 +4453,7 @@ static bool show_track_list(void)
+@@ -4367,11 +4465,7 @@ static bool show_track_list(void)
  #endif
      pf_clear_display();
      if ( center_slide.slide_index != pf_tracks.cur_idx ) {
@@ -149,7 +175,7 @@ index 394b586..87c4e5c 100644
              show_track_list_loading();
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -4584,11 +4666,7 @@ static bool track_list_ready(void)
+@@ -4584,11 +4678,7 @@ static bool track_list_ready(void)
  {
      if (pf_state != pf_show_tracks)
      {
@@ -162,7 +188,7 @@ index 394b586..87c4e5c 100644
              rb->splash(0, ID2P(LANG_WAIT));
          create_track_index(center_slide.slide_index);
          if (pf_tracks.count == 0)
-@@ -4889,6 +4967,12 @@ static bool init(void)
+@@ -4889,6 +4979,12 @@ static bool init(void)
      config_set_defaults(&pf_cfg); /* must appear before configfile_save */
      configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
  
@@ -175,7 +201,22 @@ index 394b586..87c4e5c 100644
      /* Compute viewport and rendering layout based on show_statusbar setting */
      if (pf_cfg.show_statusbar)
      {
-@@ -5186,11 +5270,7 @@ static int pictureflow_main(void)
+@@ -4961,7 +5057,14 @@ static bool init(void)
+     pf_idx.buf = buf;
+     pf_idx.buf_sz = buf_size;
+ 
++#ifdef FIIO_M3K
++    pf_font = rb->font_load("/.rockbox/fonts/16-WenQangYi-Unibit.fnt");
++    if (pf_font < 0)
++        pf_font = FONT_UI;
++    rb->lcd_setfont(pf_font);
++#else
+     rb->lcd_setfont(FONT_UI);
++#endif
+ 
+     if (!rb->dir_exists(CACHE_PREFIX))
+     {
+@@ -5186,11 +5289,7 @@ static int pictureflow_main(void)
                  update_cover_in_animation();
                  render_all_slides();
                  if (center_slide.slide_index != pf_tracks.cur_idx
@@ -188,4 +229,3 @@ index 394b586..87c4e5c 100644
                  {
                      create_track_index(center_slide.slide_index);
                      if (pf_tracks.count > 0)
-warning: in the working copy of 'apps/plugins/pictureflow/pictureflow.c', LF will be replaced by CRLF the next time Git touches it
