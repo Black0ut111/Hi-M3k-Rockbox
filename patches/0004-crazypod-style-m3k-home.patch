@@ -1,5 +1,5 @@
 diff --git a/apps/root_menu.c b/apps/root_menu.c
-index e9942d9..3f3e965 100644
+index e9942d9..04b1c90 100644
 --- a/apps/root_menu.c
 +++ b/apps/root_menu.c
 @@ -74,6 +74,11 @@
@@ -14,7 +14,7 @@ index e9942d9..3f3e965 100644
  
  struct root_items {
      int (*function)(void* param);
-@@ -717,6 +722,309 @@ static int get_selection(int last_screen)
+@@ -717,6 +722,310 @@ static int get_selection(int last_screen)
      return 0;
  }
  
@@ -80,6 +80,7 @@ index e9942d9..3f3e965 100644
 +    vp.height = 16;
 +    vp.fg_pattern = lcd_get_foreground();
 +    vp.bg_pattern = lcd_get_background();
++    vp.drawmode = DRMODE_FG;
 +    old_vp = lcd_set_viewport(&vp);
 +    lcd_putsxy(-offset, 0, text);
 +    lcd_set_viewport(old_vp);
@@ -324,7 +325,7 @@ index e9942d9..3f3e965 100644
  static inline int load_screen(int screen)
  {
      /* set the global_status.last_screen before entering,
-@@ -982,7 +1290,11 @@ void root_menu(void)
+@@ -982,7 +1291,11 @@ void root_menu(void)
                   * button to be handled by HOST instead of rockbox */
                  ignore_back_button_stub(true);
  
@@ -336,3 +337,4 @@ index e9942d9..3f3e965 100644
  
                  ignore_back_button_stub(false);
  
+warning: in the working copy of 'apps/root_menu.c', LF will be replaced by CRLF the next time Git touches it
