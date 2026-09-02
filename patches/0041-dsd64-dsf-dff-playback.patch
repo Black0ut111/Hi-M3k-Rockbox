@@ -1,4 +1,17 @@
 
+diff --git a/apps/filetypes.c b/apps/filetypes.c
+index 88e6a17..ff4bd5a 100644
+--- a/apps/filetypes.c
++++ b/apps/filetypes.c
+@@ -59,7 +59,7 @@ static const char* inbuilt_audio_filetypes[] = {
+     "ape", "mac", "sap", "rm", "ra", "rmvb", "cmc", "cm3", "cmr", "cms", "dmc",
+     "dlt", "mpt", "mpd", "rmt", "tmc", "tm8", "tm2", "oma", "aa3", "at3", "mmf",
+     "au", "snd", "vox", "w64", "tta", "ay", "vtx", "gbs", "hes", "sgc", "vgm",
+-    "vgz", "kss", "aac",
++    "vgz", "kss", "aac", "dsf", "dff", "iso",
+ };
+ 
+ struct filetype_inbuilt {
 diff --git a/lib/rbcodec/SOURCES b/lib/rbcodec/SOURCES
 index 28097e9..8b16d3c 100644
 --- a/lib/rbcodec/SOURCES
@@ -421,6 +434,7 @@ index 0000000..fdbd882
 +        return decode_dff();
 +    return CODEC_ERROR;
 +}
+warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
