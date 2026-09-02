@@ -1,0 +1,18 @@
+diff --git a/apps/plugins/text_viewer/tv_settings.c b/apps/plugins/text_viewer/tv_settings.c
+index 3cb1f21..5cc37fb 100644
+--- a/apps/plugins/text_viewer/tv_settings.c
++++ b/apps/plugins/text_viewer/tv_settings.c
+@@ -488,6 +488,12 @@ bool tv_load_settings(const unsigned char *file_name)
+         if (!tv_load_global_settings(&prefs))
+             tv_set_default_preferences(&prefs);
+     }
++    if (rb->strstr(file_name, ROCKBOX_DIR "/rocks/data/ebook_reader/"))
++    {
++        prefs.encoding = UTF_8;
++        rb->strlcpy(prefs.font_name, "16-WenQangYi-Unibit",
++                    sizeof(prefs.font_name));
++    }
+     rb->strlcpy(prefs.file_name, file_name, MAX_PATH);
+     return tv_set_preferences(&prefs);
+ }
+warning: in the working copy of 'apps/plugins/text_viewer/tv_settings.c', LF will be replaced by CRLF the next time Git touches it
