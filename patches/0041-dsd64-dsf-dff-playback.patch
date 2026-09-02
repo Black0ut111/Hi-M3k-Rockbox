@@ -596,7 +596,15 @@ index 0000000..0697eb7
 +    if (!find_iso_area(&start, &end, &duration_ms, &dst_encoded))
 +        return CODEC_ERROR;
 +
-+    uint32_t l…57 tokens truncated…ter();
++    uint32_t lsn = start;
++    unsigned char channel_bytes[2][8];
++    int channel_fill = 0;
++    int pending_left = -1;
++    int frames = 0;
++    size_t dst_size = 0;
++    bool dst_started = false;
++    int dst_sectors = 0;
++    reset_filter();
 +    if (!ci->seek_buffer((size_t)start * ISO_SECTOR))
 +        return CODEC_ERROR;
 +
@@ -1100,3 +1108,13 @@ index 0000000..80a3560
 +}
 +
 +#endif
+warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/codecs.make', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata_parsers.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/dsd.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/dsd.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/dst_decoder.h', LF will be replaced by CRLF the next time Git touches it
