@@ -33,14 +33,14 @@ index 44b7908..01d5134 100644
  #ifdef HAVE_RECORDING
  
 diff --git a/lib/rbcodec/codecs/codecs.make b/lib/rbcodec/codecs/codecs.make
-index 6f20a8c..3ffd7a0 100644
+index 6f20a8c..988a249 100644
 --- a/lib/rbcodec/codecs/codecs.make
 +++ b/lib/rbcodec/codecs/codecs.make
 @@ -222,6 +222,8 @@ $(CODECDIR)/aac_bsf.codec : $(CODECDIR)/libfaad.a
  
  $(CODECS): $(CODEC_LIBS) # this must be last in codec dependency list
  
-+$(CODECDIR)/dsd.o: CODECFLAGS += -O3 -funroll-loops
++$(CODECDIR)/dsd.o: CODECFLAGS += -O3 -funroll-loops -finline-functions -fomit-frame-pointer -falign-loops=32
 +
  # pattern rule for compiling codecs
  $(CODECDIR)/%.o: $(RBCODECLIB_DIR)/codecs/%.c
@@ -596,15 +596,7 @@ index 0000000..0697eb7
 +    if (!find_iso_area(&start, &end, &duration_ms, &dst_encoded))
 +        return CODEC_ERROR;
 +
-+    uint32_t lsn = start;
-+    unsigned char channel_bytes[2][8];
-+    int channel_fill = 0;
-+    int pending_left = -1;
-+    int frames = 0;
-+    size_t dst_size = 0;
-+    bool dst_started = false;
-+    int dst_sectors = 0;
-+    reset_filter();
++    uint32_t l…57 tokens truncated…ter();
 +    if (!ci->seek_buffer((size_t)start * ISO_SECTOR))
 +        return CODEC_ERROR;
 +
@@ -751,10 +743,10 @@ index 0000000..0697eb7
 +}
 diff --git a/lib/rbcodec/codecs/dst_decoder.h b/lib/rbcodec/codecs/dst_decoder.h
 new file mode 100644
-index 0000000..26e2bfd
+index 0000000..80a3560
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dst_decoder.h
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,353 @@
 +/*
 + * Direct Stream Transfer decoder adapted from FFmpeg's dstdec.c.
 + * Copyright (c) 2014 Peter Ross <pross@xvid.org>
@@ -980,6 +972,22 @@ index 0000000..26e2bfd
 +           filter[14][status[14]] + filter[15][status[15]];
 +}
 +
++static inline __attribute__((always_inline))
++int dst_decode_channel(struct dst_decoder *decoder,
++                       const int16_t filter[16][256],
++                       const int *probabilities, unsigned int probability_count,
++                       uint32_t status[4])
++{
++    int predict = dst_predict(filter, status);
++    unsigned int index = ABS(predict) >> 3;
++    index = MIN(index, probability_count - 1);
++    int residual = dst_ac_get(&decoder->ac, &decoder->gb,
++                              probabilities[index]);
++    int value = ((predict >> 15) ^ residual) & 1;
++    dst_push_status(status, value);
++    return value;
++}
++
 +static int __attribute__((optimize("O3")))
 +dst_decode(struct dst_decoder *decoder, const unsigned char *input,
 +           size_t input_size, unsigned char *output)
@@ -1034,7 +1042,9 @@ index 0000000..26e2bfd
 +
 +    unsigned int output_pos = 0;
 +    unsigned int packed[DST_CHANNELS] = { 0, 0 };
-+    for (unsigned int sample = 0; sample < sample_count; ++sample)
++    unsigned int fast_start = MAX(decoder->fsets.length[fset_map[0]],
++                                  decoder->fsets.length[fset_map[1]]);
++    for (unsigned int sample = 0; sample < fast_start; ++sample)
 +    {
 +        for (int ch = 0; ch < DST_CHANNELS; ++ch)
 +        {
@@ -1054,6 +1064,31 @@ index 0000000..26e2bfd
 +            packed[ch] = (packed[ch] << 1) | value;
 +            dst_push_status(status, value);
 +        }
++        if ((sample & 7) == 7)
++        {
++            output[output_pos++] = packed[0];
++            output[output_pos++] = packed[1];
++            packed[0] = packed[1] = 0;
++        }
++    }
++
++    const int16_t (*filter0)[256] = decoder->filter[fset_map[0]];
++    const int16_t (*filter1)[256] = decoder->filter[fset_map[1]];
++    const int *prob0 = decoder->probs.coeff[prob_map[0]];
++    const int *prob1 = decoder->probs.coeff[prob_map[1]];
++    unsigned int prob0_count = decoder->probs.length[prob_map[0]];
++    unsigned int prob1_count = decoder->probs.length[prob_map[1]];
++    uint32_t *status0 = decoder->status[0];
++    uint32_t *status1 = decoder->status[1];
++
++    for (unsigned int sample = fast_start; sample < sample_count; ++sample)
++    {
++        packed[0] = (packed[0] << 1) |
++                    dst_decode_channel(decoder, filter0, prob0,
++                                       prob0_count, status0);
++        packed[1] = (packed[1] << 1) |
++                    dst_decode_channel(decoder, filter1, prob1,
++                                       prob1_count, status1);
 +        if ((sample & 7) == 7)
 +        {
 +            output[output_pos++] = packed[0];
