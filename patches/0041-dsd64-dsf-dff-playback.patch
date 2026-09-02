@@ -66,7 +66,6 @@ index 6a4da51..f352b0c 100644
  bool get_kss_metadata(int fd, struct mp3entry* id3);
  bool get_aac_metadata(int fd, struct mp3entry* id3);
 +bool get_dsd_metadata(int fd, struct mp3entry* id3);
-
 diff --git a/lib/rbcodec/metadata/dsd.c b/lib/rbcodec/metadata/dsd.c
 new file mode 100644
 index 0000000..18bf54d
@@ -250,13 +249,12 @@ index 0000000..18bf54d
 +        return parse_dff(fd, id3);
 +    return parse_iso(fd, id3);
 +}
-
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..7969620
+index 0000000..d1d37e7
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
-@@ -0,0 +1,451 @@
+@@ -0,0 +1,456 @@
 +/***************************************************************************
 + * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
 + *
@@ -570,6 +568,8 @@ index 0000000..7969620
 +    bool dst_started = false;
 +    int dst_sectors = 0;
 +    reset_filter();
++    if (!ci->seek_buffer((size_t)start * ISO_SECTOR))
++        return CODEC_ERROR;
 +
 +    while (lsn <= end)
 +    {
@@ -588,10 +588,13 @@ index 0000000..7969620
 +            dst_started = false;
 +            dst_sectors = 0;
 +            reset_filter();
++            if (!ci->seek_buffer((size_t)lsn * ISO_SECTOR))
++                return CODEC_ERROR;
 +            ci->seek_complete();
 +        }
-+        if (!read_iso_sector(lsn++, iso_sector))
++        if (!read_exact(iso_sector, ISO_SECTOR))
 +            return CODEC_ERROR;
++        ++lsn;
 +
 +        unsigned header = iso_sector[0];
 +        unsigned packet_count = (header >> 5) & 7;
@@ -708,13 +711,12 @@ index 0000000..7969620
 +        return decode_dff();
 +    return decode_iso();
 +}
-
 diff --git a/lib/rbcodec/codecs/dst_decoder.h b/lib/rbcodec/codecs/dst_decoder.h
 new file mode 100644
-index 0000000..c44f193
+index 0000000..3e3e68e
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dst_decoder.h
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,309 @@
 +/*
 + * Direct Stream Transfer decoder adapted from FFmpeg's dstdec.c.
 + * Copyright (c) 2014 Peter Ross <pross@xvid.org>
@@ -753,7 +755,7 @@ index 0000000..c44f193
 +    struct dst_arith ac;
 +    struct dst_table fsets;
 +    struct dst_table probs;
-+    unsigned char status[DST_CHANNELS][16];
++    uint32_t status[DST_CHANNELS][4];
 +    int16_t filter[DST_ELEMENTS][16][256];
 +};
 +
@@ -863,7 +865,8 @@ index 0000000..c44f193
 +    ac->c = get_bits(gb, 12);
 +}
 +
-+static int dst_ac_get(struct dst_arith *ac, GetBitContext *gb, int probability)
++static inline int dst_ac_get(struct dst_arith *ac, GetBitContext *gb,
++                             int probability)
 +{
 +    unsigned int k = (ac->a >> 8) | ((ac->a >> 7) & 1);
 +    unsigned int q = k * probability;
@@ -917,11 +920,26 @@ index 0000000..c44f193
 +    return 0;
 +}
 +
-+static void dst_push_status(unsigned char status[16], int value)
++static inline void dst_push_status(uint32_t status[4], int value)
 +{
-+    for (int i = 15; i > 0; --i)
-+        status[i] = (status[i] << 1) | (status[i - 1] >> 7);
++    status[3] = (status[3] << 1) | (status[2] >> 31);
++    status[2] = (status[2] << 1) | (status[1] >> 31);
++    status[1] = (status[1] << 1) | (status[0] >> 31);
 +    status[0] = (status[0] << 1) | value;
++}
++
++static inline int dst_predict(const int16_t filter[16][256],
++                              const uint32_t words[4])
++{
++    const unsigned char *status = (const unsigned char *)words;
++    return filter[0][status[0]] + filter[1][status[1]] +
++           filter[2][status[2]] + filter[3][status[3]] +
++           filter[4][status[4]] + filter[5][status[5]] +
++           filter[6][status[6]] + filter[7][status[7]] +
++           filter[8][status[8]] + filter[9][status[9]] +
++           filter[10][status[10]] + filter[11][status[11]] +
++           filter[12][status[12]] + filter[13][status[13]] +
++           filter[14][status[14]] + filter[15][status[15]];
 +}
 +
 +static int dst_decode(struct dst_decoder *decoder, const unsigned char *input,
@@ -975,15 +993,15 @@ index 0000000..c44f193
 +    dst_ac_get(&decoder->ac, &decoder->gb,
 +               dst_probability(decoder->fsets.coeff[0][0]));
 +
++    unsigned int output_pos = 0;
++    unsigned int packed[DST_CHANNELS] = { 0, 0 };
 +    for (unsigned int sample = 0; sample < sample_count; ++sample)
 +    {
 +        for (int ch = 0; ch < DST_CHANNELS; ++ch)
 +        {
 +            unsigned int felem = fset_map[ch];
-+            unsigned char *status = decoder->status[ch];
-+            int predict = 0;
-+            for (int i = 0; i < 16; ++i)
-+                predict += decoder->filter[felem][i][status[i]];
++            uint32_t *status = decoder->status[ch];
++            int predict = dst_predict(decoder->filter[felem], status);
 +            int probability = 128;
 +            if (!half_prob[ch] || sample >= decoder->fsets.length[felem])
 +            {
@@ -994,13 +1012,17 @@ index 0000000..c44f193
 +            }
 +            int residual = dst_ac_get(&decoder->ac, &decoder->gb, probability);
 +            int value = ((predict >> 15) ^ residual) & 1;
-+            output[(sample >> 3) * DST_CHANNELS + ch] |=
-+                value << (7 - (sample & 7));
++            packed[ch] = (packed[ch] << 1) | value;
 +            dst_push_status(status, value);
++        }
++        if ((sample & 7) == 7)
++        {
++            output[output_pos++] = packed[0];
++            output[output_pos++] = packed[1];
++            packed[0] = packed[1] = 0;
 +        }
 +    }
 +    return DST_FRAME_BYTES * DST_CHANNELS;
 +}
 +
 +#endif
-
