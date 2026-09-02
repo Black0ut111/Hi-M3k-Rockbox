@@ -251,10 +251,10 @@ index 0000000..18bf54d
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..858c171
+index 0000000..be053ae
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
-@@ -0,0 +1,481 @@
+@@ -0,0 +1,485 @@
 +/***************************************************************************
 + * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
 + *
@@ -454,6 +454,9 @@ index 0000000..858c171
 +    while (read_exact(chunk, sizeof(chunk)))
 +    {
 +        uint64_t size = be64(chunk + 4);
++        size_t data_start_pos = ci->curpos;
++        if (size > (uint64_t)ci->filesize - data_start_pos)
++            return CODEC_ERROR;
 +        if (!ci->memcmp(chunk, "PROP", 4) && size >= 4)
 +        {
 +            unsigned char type[4];
@@ -468,7 +471,8 @@ index 0000000..858c171
 +            data_start = ci->curpos;
 +            break;
 +        }
-+        if (!ci->memcmp(chunk, "DST ", 4) || !ci->seek_buffer(ci->curpos + size + (size & 1)))
++        if (!ci->memcmp(chunk, "DST ", 4) ||
++            !ci->seek_buffer(data_start_pos + size + (size & 1)))
 +            return CODEC_ERROR;
 +    }
 +    if (!data_size)
@@ -1098,14 +1102,12 @@ index 0000000..80a3560
 warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'lib/rbcodec/codecs/codecs.make', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata.h', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata_parsers.h', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'lib/rbcodec/codecs/codecs.make', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata.h', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/metadata/metadata_parsers.h', LF will be replaced by CRLF the next time Git touches it
