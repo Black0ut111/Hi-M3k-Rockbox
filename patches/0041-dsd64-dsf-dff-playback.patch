@@ -32,6 +32,19 @@ index 44b7908..01d5134 100644
  
  #ifdef HAVE_RECORDING
  
+diff --git a/lib/rbcodec/codecs/codecs.make b/lib/rbcodec/codecs/codecs.make
+index 6f20a8c..3ffd7a0 100644
+--- a/lib/rbcodec/codecs/codecs.make
++++ b/lib/rbcodec/codecs/codecs.make
+@@ -222,6 +222,8 @@ $(CODECDIR)/aac_bsf.codec : $(CODECDIR)/libfaad.a
+ 
+ $(CODECS): $(CODEC_LIBS) # this must be last in codec dependency list
+ 
++$(CODECDIR)/dsd.o: CODECFLAGS += -O3 -funroll-loops
++
+ # pattern rule for compiling codecs
+ $(CODECDIR)/%.o: $(RBCODECLIB_DIR)/codecs/%.c
+ 	$(SILENT)mkdir -p $(dir $@)
 diff --git a/lib/rbcodec/metadata/metadata.c b/lib/rbcodec/metadata/metadata.c
 index 708ded5..a7d68d1 100644
 --- a/lib/rbcodec/metadata/metadata.c
@@ -251,10 +264,10 @@ index 0000000..18bf54d
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..d1d37e7
+index 0000000..0697eb7
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
-@@ -0,0 +1,456 @@
+@@ -0,0 +1,481 @@
 +/***************************************************************************
 + * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
 + *
@@ -279,6 +292,7 @@ index 0000000..d1d37e7
 +static unsigned char dst_frame[65536 + 8] IBSS_ATTR;
 +static unsigned char dst_output[DST_FRAME_BYTES * 2] IBSS_ATTR;
 +static struct dst_decoder dst_state IBSS_ATTR;
++static int16_t cic_table[2][256][3] IBSS_ATTR;
 +
 +struct cic_state
 +{
@@ -317,19 +331,42 @@ index 0000000..d1d37e7
 +    ci->memset(&right_cic, 0, sizeof(right_cic));
 +}
 +
++static void init_cic_table(void)
++{
++    for (int order = 0; order < 2; ++order)
++    {
++        for (int value = 0; value < 256; ++value)
++        {
++            int sum = 0;
++            int first = 0;
++            int second = 0;
++            for (int bit = 0; bit < 8; ++bit)
++            {
++                int shift = order ? bit : 7 - bit;
++                int sample = (value & (1 << shift)) ? 1 : -1;
++                int remaining = 8 - bit;
++                sum += sample;
++                first += remaining * sample;
++                second += remaining * (remaining + 1) / 2 * sample;
++            }
++            cic_table[order][value][0] = sum;
++            cic_table[order][value][1] = first;
++            cic_table[order][value][2] = second;
++        }
++    }
++}
++
 +static int32_t decimate64(struct cic_state *state,
 +                          const unsigned char *p, bool lsb_first)
 +{
 +    for (int byte = 0; byte < 8; ++byte)
 +    {
-+        unsigned value = p[byte];
-+        for (int bit = 0; bit < 8; ++bit)
-+        {
-+            unsigned shift = lsb_first ? bit : 7 - bit;
-+            state->integrator[0] += (value & (1u << shift)) ? 1 : (uint64_t)-1;
-+            state->integrator[1] += state->integrator[0];
-+            state->integrator[2] += state->integrator[1];
-+        }
++        const int16_t *entry = cic_table[lsb_first][p[byte]];
++        uint64_t first = state->integrator[0];
++        uint64_t second = state->integrator[1];
++        state->integrator[2] += second * 8 + first * 36 + entry[2];
++        state->integrator[1] += first * 8 + entry[1];
++        state->integrator[0] += entry[0];
 +    }
 +
 +    uint64_t value = state->integrator[2];
@@ -701,6 +738,7 @@ index 0000000..d1d37e7
 +    if (codec_init())
 +        return CODEC_ERROR;
 +    codec_set_replaygain(ci->id3);
++    init_cic_table();
 +    ci->configure(DSP_SET_FREQUENCY, PCM_RATE);
 +    ci->configure(DSP_SET_STEREO_MODE, STEREO_INTERLEAVED);
 +    if (!ci->seek_buffer(0) || !read_exact(magic, sizeof(magic)))
@@ -713,10 +751,10 @@ index 0000000..d1d37e7
 +}
 diff --git a/lib/rbcodec/codecs/dst_decoder.h b/lib/rbcodec/codecs/dst_decoder.h
 new file mode 100644
-index 0000000..3e3e68e
+index 0000000..26e2bfd
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dst_decoder.h
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,310 @@
 +/*
 + * Direct Stream Transfer decoder adapted from FFmpeg's dstdec.c.
 + * Copyright (c) 2014 Peter Ross <pross@xvid.org>
@@ -942,8 +980,9 @@ index 0000000..3e3e68e
 +           filter[14][status[14]] + filter[15][status[15]];
 +}
 +
-+static int dst_decode(struct dst_decoder *decoder, const unsigned char *input,
-+                      size_t input_size, unsigned char *output)
++static int __attribute__((optimize("O3")))
++dst_decode(struct dst_decoder *decoder, const unsigned char *input,
++           size_t input_size, unsigned char *output)
 +{
 +    unsigned int fset_map[DST_CHANNELS];
 +    unsigned int prob_map[DST_CHANNELS];
