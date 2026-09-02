@@ -1,0 +1,429 @@
+diff --git a/lib/rbcodec/SOURCES b/lib/rbcodec/SOURCES
+index 28097e9..8b16d3c 100644
+--- a/lib/rbcodec/SOURCES
++++ b/lib/rbcodec/SOURCES
+@@ -67,3 +67,4 @@ metadata/vox.c
+ metadata/wave.c
+ metadata/wavpack.c
+ metadata/aac.c
++metadata/dsd.c
+diff --git a/lib/rbcodec/codecs/SOURCES b/lib/rbcodec/codecs/SOURCES
+index 44b7908..01d5134 100644
+--- a/lib/rbcodec/codecs/SOURCES
++++ b/lib/rbcodec/codecs/SOURCES
+@@ -46,6 +46,7 @@ sid.c
+ kss.c
+ #endif
+ aac_bsf.c
++dsd.c
+ 
+ #ifdef HAVE_RECORDING
+ 
+diff --git a/lib/rbcodec/metadata/metadata.c b/lib/rbcodec/metadata/metadata.c
+index 708ded5..43d5856 100644
+--- a/lib/rbcodec/metadata/metadata.c
++++ b/lib/rbcodec/metadata/metadata.c
+@@ -235,6 +235,8 @@ const struct afmt_entry audio_formats[AFMT_NUM_CODECS] =
+     /* AAC bitstream format */
+     [AFMT_AAC_BSF] =
+         AFMT_ENTRY("AAC", "aac_bsf", "N/A", get_aac_metadata,   "aac\0"),
++    [AFMT_DSD] =
++        AFMT_ENTRY("DSD", "dsd", "N/A", get_dsd_metadata, "dsf\0dff\0"),
+ };
+ 
+ #if defined (HAVE_RECORDING)
+diff --git a/lib/rbcodec/metadata/metadata.h b/lib/rbcodec/metadata/metadata.h
+index 0b03d2a..173a6a7 100644
+--- a/lib/rbcodec/metadata/metadata.h
++++ b/lib/rbcodec/metadata/metadata.h
+@@ -95,6 +95,7 @@ enum
+     AFMT_KSS,          /* KSS (MSX computer KSS Music File) */
+     AFMT_OPUS,         /* Opus (see http://www.opus-codec.org ) */
+     AFMT_AAC_BSF,
++    AFMT_DSD,
+ 
+     /* add new formats at any index above this line to have a sensible order -
+        specified array index inits are used */
+diff --git a/lib/rbcodec/metadata/metadata_parsers.h b/lib/rbcodec/metadata/metadata_parsers.h
+index 6a4da51..f352b0c 100644
+--- a/lib/rbcodec/metadata/metadata_parsers.h
++++ b/lib/rbcodec/metadata/metadata_parsers.h
+@@ -58,3 +58,4 @@ bool get_sgc_metadata(int fd, struct mp3entry* id3);
+ bool get_vgm_metadata(int fd, struct mp3entry* id3);
+ bool get_kss_metadata(int fd, struct mp3entry* id3);
+ bool get_aac_metadata(int fd, struct mp3entry* id3);
++bool get_dsd_metadata(int fd, struct mp3entry* id3);
+diff --git a/lib/rbcodec/metadata/dsd.c b/lib/rbcodec/metadata/dsd.c
+new file mode 100644
+index 0000000..e86468f
+--- /dev/null
++++ b/lib/rbcodec/metadata/dsd.c
+@@ -0,0 +1,140 @@
++/***************************************************************************
++ * DSD stream metadata for DSF and DSDIFF.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License version 2.
++ ****************************************************************************/
++#include <string.h>
++#include "metadata.h"
++#include "metadata_parsers.h"
++
++static uint32_t le32(const unsigned char *p)
++{
++    return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
++}
++
++static uint64_t le64(const unsigned char *p)
++{
++    return le32(p) | ((uint64_t)le32(p + 4) << 32);
++}
++
++static uint32_t be32(const unsigned char *p)
++{
++    return ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
++}
++
++static uint64_t be64(const unsigned char *p)
++{
++    return ((uint64_t)be32(p) << 32) | be32(p + 4);
++}
++
++static void set_common(struct mp3entry *id3, uint32_t rate,
++                       uint64_t samples, uint64_t data_size)
++{
++    id3->frequency = rate / 64;
++    id3->samples = samples / 64;
++    id3->length = rate ? (unsigned long)(samples * 1000 / rate) : 0;
++    id3->filesize = data_size;
++    id3->bitrate = rate ? (rate * 2) / 1000 : 5644;
++    id3->vbr = false;
++}
++
++static bool parse_dsf(int fd, struct mp3entry *id3, const unsigned char *head)
++{
++    unsigned char fmt[52];
++    uint64_t metadata_offset = le64(head + 20);
++
++    if (lseek(fd, 28, SEEK_SET) < 0 || read(fd, fmt, sizeof(fmt)) != sizeof(fmt) ||
++        memcmp(fmt, "fmt ", 4) || le64(fmt + 4) < sizeof(fmt) ||
++        le32(fmt + 24) != 2 || le32(fmt + 28) != 2822400 ||
++        (le32(fmt + 32) != 1 && le32(fmt + 32) != 8) ||
++        le32(fmt + 44) != 4096)
++        return false;
++
++    set_common(id3, le32(fmt + 28), le64(fmt + 36), le64(head + 12));
++    id3->first_frame_offset = 92;
++
++    if (metadata_offset && metadata_offset + 10 < (uint64_t)filesize(fd) &&
++        lseek(fd, metadata_offset, SEEK_SET) >= 0)
++    {
++        unsigned char tag[10];
++        if (read(fd, tag, sizeof(tag)) == sizeof(tag) && !memcmp(tag, "ID3", 3))
++        {
++            id3->id3v2len = 10 + ((tag[6] & 0x7f) << 21) +
++                ((tag[7] & 0x7f) << 14) + ((tag[8] & 0x7f) << 7) +
++                (tag[9] & 0x7f);
++            lseek(fd, metadata_offset, SEEK_SET);
++            setid3v2title(fd, id3);
++        }
++    }
++    return true;
++}
++
++static bool parse_dff(int fd, struct mp3entry *id3)
++{
++    unsigned char chunk[12];
++    uint32_t rate = 0;
++    uint32_t channels = 0;
++    uint64_t dsd_size = 0;
++    off_t end = filesize(fd);
++
++    if (lseek(fd, 16, SEEK_SET) < 0)
++        return false;
++
++    while (lseek(fd, 0, SEEK_CUR) + 12 <= end)
++    {
++        if (read(fd, chunk, sizeof(chunk)) != sizeof(chunk))
++            break;
++        uint64_t size = be64(chunk + 4);
++        off_t data = lseek(fd, 0, SEEK_CUR);
++        if (!memcmp(chunk, "PROP", 4) && size >= 4)
++        {
++            unsigned char type[4];
++            if (read(fd, type, 4) != 4 || memcmp(type, "SND ", 4))
++                return false;
++            continue;
++        }
++        else if (!memcmp(chunk, "FS  ", 4) && size >= 4)
++        {
++            unsigned char value[4];
++            if (read(fd, value, 4) != 4)
++                return false;
++            rate = be32(value);
++        }
++        else if (!memcmp(chunk, "CHNL", 4) && size >= 2)
++        {
++            unsigned char value[2];
++            if (read(fd, value, 2) != 2)
++                return false;
++            channels = (value[0] << 8) | value[1];
++        }
++        else if (!memcmp(chunk, "DSD ", 4))
++        {
++            dsd_size = size;
++            id3->first_frame_offset = data;
++            break;
++        }
++        else if (!memcmp(chunk, "DST ", 4))
++            return false;
++
++        if (lseek(fd, data + size + (size & 1), SEEK_SET) < 0)
++            return false;
++    }
++
++    if (rate != 2822400 || channels != 2 || !dsd_size)
++        return false;
++    set_common(id3, rate, dsd_size * 4, dsd_size);
++    return true;
++}
++
++bool get_dsd_metadata(int fd, struct mp3entry *id3)
++{
++    unsigned char head[28];
++    if (lseek(fd, 0, SEEK_SET) < 0 || read(fd, head, sizeof(head)) != sizeof(head))
++        return false;
++    if (!memcmp(head, "DSD ", 4))
++        return parse_dsf(fd, id3, head);
++    if (!memcmp(head, "FRM8", 4) && !memcmp(head + 12, "DSD ", 4))
++        return parse_dff(fd, id3);
++    return false;
++}
+diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
+new file mode 100644
+index 0000000..32443e7
+--- /dev/null
++++ b/lib/rbcodec/codecs/dsd.c
+@@ -0,0 +1,215 @@
++/***************************************************************************
++ * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License version 2.
++ ****************************************************************************/
++#include "codeclib.h"
++
++CODEC_HEADER
++
++#define DSD_RATE 2822400
++#define PCM_RATE 44100
++#define DSF_BLOCK 4096
++#define PCM_FRAMES 512
++
++static int32_t pcm[PCM_FRAMES * 2] IBSS_ATTR;
++static unsigned char left_block[DSF_BLOCK];
++static unsigned char right_block[DSF_BLOCK];
++
++static uint32_t le32(const unsigned char *p)
++{
++    return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
++}
++
++static uint64_t le64(const unsigned char *p)
++{
++    return le32(p) | ((uint64_t)le32(p + 4) << 32);
++}
++
++static uint64_t be64(const unsigned char *p)
++{
++    uint64_t hi = ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
++    uint64_t lo = ((uint32_t)p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];
++    return (hi << 32) | lo;
++}
++
++static unsigned popcount8(unsigned v)
++{
++    v = v - ((v >> 1) & 0x55);
++    v = (v & 0x33) + ((v >> 2) & 0x33);
++    return (v + (v >> 4)) & 0x0f;
++}
++
++static int32_t decimate64(const unsigned char *p)
++{
++    unsigned ones = 0;
++    for (int i = 0; i < 8; ++i)
++        ones += popcount8(p[i]);
++    return ((int32_t)ones - 32) << 23;
++}
++
++static bool read_exact(void *dst, size_t size)
++{
++    return ci->read_filebuf(dst, size) == size;
++}
++
++static bool parse_dsf(uint64_t *data_size, uint64_t *sample_count)
++{
++    unsigned char h[92];
++    if (!ci->seek_buffer(0) || !read_exact(h, sizeof(h)) ||
++        ci->memcmp(h, "DSD ", 4) || ci->memcmp(h + 28, "fmt ", 4) ||
++        le32(h + 52) != 2 || le32(h + 56) != DSD_RATE ||
++        (le32(h + 60) != 1 && le32(h + 60) != 8) ||
++        le32(h + 72) != DSF_BLOCK ||
++        ci->memcmp(h + 80, "data", 4))
++        return false;
++    uint64_t chunk_size = le64(h + 84);
++    if (chunk_size < 12)
++        return false;
++    *data_size = chunk_size - 12;
++    *sample_count = le64(h + 64);
++    return true;
++}
++
++static enum codec_status decode_dsf(void)
++{
++    uint64_t remaining;
++    uint64_t sample_count;
++    if (!parse_dsf(&remaining, &sample_count))
++        return CODEC_ERROR;
++
++    uint64_t total = remaining;
++    uint64_t total_frames = sample_count / 64;
++    uint64_t frames_done = 0;
++    while (remaining >= DSF_BLOCK * 2 && frames_done < total_frames)
++    {
++        intptr_t param;
++        long action = ci->get_command(&param);
++        if (action == CODEC_ACTION_HALT)
++            break;
++        if (action == CODEC_ACTION_SEEK_TIME)
++        {
++            uint64_t target_frame = MIN((uint64_t)param * PCM_RATE / 1000,
++                                        total_frames);
++            uint64_t block = target_frame / PCM_FRAMES;
++            if (!ci->seek_buffer(92 + block * DSF_BLOCK * 2))
++                return CODEC_ERROR;
++            frames_done = block * PCM_FRAMES;
++            remaining = total - MIN(total, block * DSF_BLOCK * 2);
++            ci->seek_complete();
++        }
++        if (!read_exact(left_block, DSF_BLOCK) || !read_exact(right_block, DSF_BLOCK))
++            break;
++        int frames = MIN((uint64_t)PCM_FRAMES, total_frames - frames_done);
++        for (int i = 0; i < frames; ++i)
++        {
++            pcm[i * 2] = decimate64(left_block + i * 8);
++            pcm[i * 2 + 1] = decimate64(right_block + i * 8);
++        }
++        ci->pcmbuf_insert(pcm, NULL, frames);
++        frames_done += frames;
++        remaining -= DSF_BLOCK * 2;
++        ci->set_elapsed(frames_done * 1000 / PCM_RATE);
++    }
++    return CODEC_OK;
++}
++
++static enum codec_status decode_dff(void)
++{
++    unsigned char head[16];
++    unsigned char chunk[12];
++    uint64_t data_size = 0;
++    uint64_t total_size = 0;
++    size_t data_start = 0;
++
++    if (!ci->seek_buffer(0) || !read_exact(head, sizeof(head)) ||
++        ci->memcmp(head, "FRM8", 4) || ci->memcmp(head + 12, "DSD ", 4))
++        return CODEC_ERROR;
++
++    while (read_exact(chunk, sizeof(chunk)))
++    {
++        uint64_t size = be64(chunk + 4);
++        if (!ci->memcmp(chunk, "PROP", 4) && size >= 4)
++        {
++            unsigned char type[4];
++            if (!read_exact(type, 4) || ci->memcmp(type, "SND ", 4))
++                return CODEC_ERROR;
++            continue;
++        }
++        else if (!ci->memcmp(chunk, "DSD ", 4))
++        {
++            data_size = size;
++            total_size = size;
++            data_start = ci->curpos;
++            break;
++        }
++        if (!ci->memcmp(chunk, "DST ", 4) || !ci->seek_buffer(ci->curpos + size + (size & 1)))
++            return CODEC_ERROR;
++    }
++    if (!data_size)
++        return CODEC_ERROR;
++
++    uint64_t frames_done = 0;
++    unsigned char packed[16];
++    while (data_size >= sizeof(packed))
++    {
++        intptr_t param;
++        long action = ci->get_command(&param);
++        if (action == CODEC_ACTION_HALT)
++            break;
++        if (action == CODEC_ACTION_SEEK_TIME)
++        {
++            uint64_t frame = (uint64_t)param * PCM_RATE / 1000;
++            uint64_t offset = MIN(total_size, frame * 16);
++            offset -= offset % 16;
++            if (!ci->seek_buffer(data_start + offset))
++                return CODEC_ERROR;
++            data_size = total_size - offset;
++            frames_done = offset / 16;
++            ci->seek_complete();
++        }
++        int frames = 0;
++        while (frames < PCM_FRAMES && data_size >= sizeof(packed) &&
++               read_exact(packed, sizeof(packed)))
++        {
++            for (int i = 0; i < 8; ++i)
++            {
++                left_block[i] = packed[i * 2];
++                right_block[i] = packed[i * 2 + 1];
++            }
++            pcm[frames * 2] = decimate64(left_block);
++            pcm[frames * 2 + 1] = decimate64(right_block);
++            ++frames;
++            data_size -= sizeof(packed);
++        }
++        ci->pcmbuf_insert(pcm, NULL, frames);
++        frames_done += frames;
++        ci->set_elapsed(frames_done * 1000 / PCM_RATE);
++    }
++    return CODEC_OK;
++}
++
++enum codec_status codec_main(enum codec_entry_call_reason reason)
++{
++    if (reason == CODEC_LOAD)
++        ci->configure(DSP_SET_SAMPLE_DEPTH, PCM_OUTPUT_DEPTH - 1);
++    return CODEC_OK;
++}
++
++enum codec_status codec_run(void)
++{
++    unsigned char magic[16];
++    if (codec_init())
++        return CODEC_ERROR;
++    codec_set_replaygain(ci->id3);
++    ci->configure(DSP_SET_FREQUENCY, PCM_RATE);
++    ci->configure(DSP_SET_STEREO_MODE, STEREO_INTERLEAVED);
++    if (!ci->seek_buffer(0) || !read_exact(magic, sizeof(magic)))
++        return CODEC_ERROR;
++    if (!ci->memcmp(magic, "DSD ", 4))
++        return decode_dsf();
++    if (!ci->memcmp(magic, "FRM8", 4))
++        return decode_dff();
++    return CODEC_ERROR;
++}
+warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata_parsers.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/dsd.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/dsd.c', LF will be replaced by CRLF the next time Git touches it
