@@ -1,3 +1,4 @@
+
 diff --git a/lib/rbcodec/SOURCES b/lib/rbcodec/SOURCES
 index 28097e9..8b16d3c 100644
 --- a/lib/rbcodec/SOURCES
@@ -201,7 +202,7 @@ index 0000000..e86468f
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..32443e7
+index 0000000..fdbd882
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
 @@ -0,0 +1,215 @@
@@ -400,7 +401,7 @@ index 0000000..32443e7
 +enum codec_status codec_main(enum codec_entry_call_reason reason)
 +{
 +    if (reason == CODEC_LOAD)
-+        ci->configure(DSP_SET_SAMPLE_DEPTH, PCM_OUTPUT_DEPTH - 1);
++        ci->configure(DSP_SET_SAMPLE_DEPTH, 28);
 +    return CODEC_OK;
 +}
 +
