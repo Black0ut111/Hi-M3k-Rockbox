@@ -34,7 +34,7 @@ index 44b7908..01d5134 100644
  #ifdef HAVE_RECORDING
  
 diff --git a/lib/rbcodec/metadata/metadata.c b/lib/rbcodec/metadata/metadata.c
-index 708ded5..43d5856 100644
+index 708ded5..a7d68d1 100644
 --- a/lib/rbcodec/metadata/metadata.c
 +++ b/lib/rbcodec/metadata/metadata.c
 @@ -235,6 +235,8 @@ const struct afmt_entry audio_formats[AFMT_NUM_CODECS] =
@@ -42,7 +42,7 @@ index 708ded5..43d5856 100644
      [AFMT_AAC_BSF] =
          AFMT_ENTRY("AAC", "aac_bsf", "N/A", get_aac_metadata,   "aac\0"),
 +    [AFMT_DSD] =
-+        AFMT_ENTRY("DSD", "dsd", "N/A", get_dsd_metadata, "dsf\0dff\0"),
++        AFMT_ENTRY("DSD", "dsd", "N/A", get_dsd_metadata, "dsf\0dff\0iso\0"),
  };
  
  #if defined (HAVE_RECORDING)
@@ -69,10 +69,10 @@ index 6a4da51..f352b0c 100644
 +bool get_dsd_metadata(int fd, struct mp3entry* id3);
 diff --git a/lib/rbcodec/metadata/dsd.c b/lib/rbcodec/metadata/dsd.c
 new file mode 100644
-index 0000000..e86468f
+index 0000000..d1e5174
 --- /dev/null
 +++ b/lib/rbcodec/metadata/dsd.c
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,178 @@
 +/***************************************************************************
 + * DSD stream metadata for DSF and DSDIFF.
 + *
@@ -202,6 +202,44 @@ index 0000000..e86468f
 +    return true;
 +}
 +
++static bool read_iso_sector(int fd, uint32_t lsn, unsigned char *sector)
++{
++    off_t offset = (off_t)lsn * 2048;
++    return lseek(fd, offset, SEEK_SET) >= 0 && read(fd, sector, 2048) == 2048;
++}
++
++static bool parse_iso_area(int fd, struct mp3entry *id3, uint32_t lsn)
++{
++    unsigned char area[2048];
++    if (!lsn || !read_iso_sector(fd, lsn, area) ||
++        memcmp(area, "TWOCHTOC", 8) || area[32] != 2 ||
++        (area[21] & 0x0f) == 0)
++        return false;
++
++    uint32_t start = be32(area + 72);
++    uint32_t end = be32(area + 76);
++    unsigned long seconds = area[64] * 60 + area[65];
++    if (!start || end < start || !seconds)
++        return false;
++
++    set_common(id3, 2822400, (uint64_t)seconds * 2822400,
++               ((uint64_t)end - start + 1) * 2048);
++    id3->length += area[66] * 1000 / 75;
++    id3->first_frame_offset = (off_t)start * 2048;
++    return true;
++}
++
++static bool parse_iso(int fd, struct mp3entry *id3)
++{
++    unsigned char master[2048];
++    if (!read_iso_sector(fd, 510, master) || memcmp(master, "SACDMTOC", 8))
++        return false;
++
++    uint32_t area1 = be32(master + 64);
++    uint32_t area2 = be32(master + 72);
++    return parse_iso_area(fd, id3, area1) || parse_iso_area(fd, id3, area2);
++}
++
 +bool get_dsd_metadata(int fd, struct mp3entry *id3)
 +{
 +    unsigned char head[28];
@@ -211,14 +249,14 @@ index 0000000..e86468f
 +        return parse_dsf(fd, id3, head);
 +    if (!memcmp(head, "FRM8", 4) && !memcmp(head + 12, "DSD ", 4))
 +        return parse_dff(fd, id3);
-+    return false;
++    return parse_iso(fd, id3);
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..a4635b0
+index 0000000..492addc
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,372 @@
 +/***************************************************************************
 + * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
 + *
@@ -233,10 +271,12 @@ index 0000000..a4635b0
 +#define PCM_RATE 44100
 +#define DSF_BLOCK 4096
 +#define PCM_FRAMES 512
++#define ISO_SECTOR 2048
 +
 +static int32_t pcm[PCM_FRAMES * 2] IBSS_ATTR;
 +static unsigned char left_block[DSF_BLOCK];
 +static unsigned char right_block[DSF_BLOCK];
++static unsigned char iso_sector[ISO_SECTOR];
 +
 +struct cic_state
 +{
@@ -262,6 +302,11 @@ index 0000000..a4635b0
 +    uint64_t hi = ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 +    uint64_t lo = ((uint32_t)p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];
 +    return (hi << 32) | lo;
++}
++
++static uint32_t be32(const unsigned char *p)
++{
++    return ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 +}
 +
 +static void reset_filter(void)
@@ -445,6 +490,122 @@ index 0000000..a4635b0
 +    return CODEC_OK;
 +}
 +
++static bool read_iso_sector(uint32_t lsn, unsigned char *sector)
++{
++    return ci->seek_buffer((size_t)lsn * ISO_SECTOR) &&
++           read_exact(sector, ISO_SECTOR);
++}
++
++static bool find_iso_area(uint32_t *start, uint32_t *end,
++                          unsigned long *duration_ms)
++{
++    if (!read_iso_sector(510, iso_sector) ||
++        ci->memcmp(iso_sector, "SACDMTOC", 8))
++        return false;
++
++    uint32_t areas[2] = { be32(iso_sector + 64), be32(iso_sector + 72) };
++    for (int i = 0; i < 2; ++i)
++    {
++        if (!areas[i] || !read_iso_sector(areas[i], iso_sector) ||
++            ci->memcmp(iso_sector, "TWOCHTOC", 8) || iso_sector[32] != 2)
++            continue;
++        if ((iso_sector[21] & 0x0f) == 0)
++            return false;
++        *start = be32(iso_sector + 72);
++        *end = be32(iso_sector + 76);
++        *duration_ms = (iso_sector[64] * 60ul + iso_sector[65]) * 1000ul +
++                       iso_sector[66] * 1000ul / 75;
++        return *start && *end >= *start && *duration_ms;
++    }
++    return false;
++}
++
++static enum codec_status decode_iso(void)
++{
++    uint32_t start, end;
++    unsigned long duration_ms;
++    if (!find_iso_area(&start, &end, &duration_ms))
++        return CODEC_ERROR;
++
++    uint32_t lsn = start;
++    unsigned char channel_bytes[2][8];
++    int channel_fill = 0;
++    int pending_left = -1;
++    int frames = 0;
++    reset_filter();
++
++    while (lsn <= end)
++    {
++        intptr_t param;
++        long action = ci->get_command(&param);
++        if (action == CODEC_ACTION_HALT)
++            break;
++        if (action == CODEC_ACTION_SEEK_TIME)
++        {
++            uint64_t span = (uint64_t)end - start + 1;
++            lsn = start + MIN(span - 1, span * (uint64_t)param / duration_ms);
++            channel_fill = 0;
++            pending_left = -1;
++            frames = 0;
++            reset_filter();
++            ci->seek_complete();
++        }
++        if (!read_iso_sector(lsn++, iso_sector))
++            return CODEC_ERROR;
++
++        unsigned header = iso_sector[0];
++        unsigned packet_count = (header >> 5) & 7;
++        unsigned frame_count = (header >> 2) & 7;
++        if (header & 1)
++            return CODEC_ERROR;
++        size_t offset = 1 + packet_count * 2 + frame_count * 3;
++        if (offset > ISO_SECTOR)
++            return CODEC_ERROR;
++
++        for (unsigned packet = 0; packet < packet_count; ++packet)
++        {
++            unsigned char *info = iso_sector + 1 + packet * 2;
++            unsigned type = (info[0] >> 3) & 7;
++            unsigned length = ((info[0] & 7) << 8) | info[1];
++            if (offset + length > ISO_SECTOR)
++                return CODEC_ERROR;
++            if (type == 2)
++            {
++                for (unsigned i = 0; i < length; ++i)
++                {
++                    if (pending_left < 0)
++                    {
++                        pending_left = iso_sector[offset + i];
++                        continue;
++                    }
++                    channel_bytes[0][channel_fill] = pending_left;
++                    channel_bytes[1][channel_fill++] = iso_sector[offset + i];
++                    pending_left = -1;
++                    if (channel_fill == 8)
++                    {
++                        pcm[frames * 2] = decimate64(&left_cic,
++                                                     channel_bytes[0], false);
++                        pcm[frames * 2 + 1] = decimate64(&right_cic,
++                                                         channel_bytes[1], false);
++                        channel_fill = 0;
++                        if (++frames == PCM_FRAMES)
++                        {
++                            ci->pcmbuf_insert(pcm, NULL, frames);
++                            frames = 0;
++                        }
++                    }
++                }
++            }
++            offset += length;
++        }
++        ci->set_elapsed((uint64_t)(lsn - start) * duration_ms /
++                        ((uint64_t)end - start + 1));
++    }
++    if (frames)
++        ci->pcmbuf_insert(pcm, NULL, frames);
++    return CODEC_OK;
++}
++
 +enum codec_status codec_main(enum codec_entry_call_reason reason)
 +{
 +    if (reason == CODEC_LOAD)
@@ -466,7 +627,7 @@ index 0000000..a4635b0
 +        return decode_dsf();
 +    if (!ci->memcmp(magic, "FRM8", 4))
 +        return decode_dff();
-+    return CODEC_ERROR;
++    return decode_iso();
 +}
 warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
