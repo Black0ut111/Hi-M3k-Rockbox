@@ -1,4 +1,4 @@
-## Hi-M3K v1.0.0
+## Hi-M3K
 
 适用于 FiiO M3K 的 Rockbox 定制固件，针对 M3K 的屏幕、按键和使用体验进行了适配。
 Hi-M3K is a customized Rockbox firmware for the FiiO M3K, adapted and optimized for its display, controls, and overall user experience.
