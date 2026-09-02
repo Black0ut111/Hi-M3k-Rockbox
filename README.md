@@ -1,35 +1,37 @@
-# Rockpod for FiiO M3K
+Hi-M3K v1.0.0
 
-A clean-room port of the portable Rockpod user-interface features to the native
-Rockbox target for the FiiO M3K.
+中文简介
 
-## Status
+适用于 FiiO M3K 的 Rockbox 定制固件，针对 M3K 的屏幕、按键和使用体验进行了适配。
 
-Early bring-up. The first milestone builds an unmodified upstream Rockbox image
-for `fiiom3k` in GitHub Actions. Rockpod-specific UI patches will be added only
-after that baseline build is reproducible.
+主要功能
 
-## Scope
+全新的 Hi-M3K 图形化主界面
 
-Planned:
+Hi-M3K 风格菜单布局
 
-- Dynamic colours derived from album art
-- Portrait-friendly Cover Flow / PictureFlow for the M3K's 240×320 display
-- Rockpod-style theme and rendering improvements
-- Standard native Rockbox features for FiiO M3K
+自定义主界面壁纸及透明图标
 
-Not portable from the iPod implementation:
+统一的二级菜单视觉风格
 
-- Apple MFi / iAP digital audio
-- iPod dock USB implementation
-- iFlash / ATA and iPod-specific power-management code
+优化中文字体与符号显示
 
-## Safety
+支持中文歌曲名称和艺术家信息
 
-Test packages replace only the `.rockbox` directory on the microSD card.
-They do not replace the already-installed native M3K bootloader. Always keep a
-known-good backup of your current `.rockbox` directory.
+优化 CoverFlow 滑动流畅度
 
-## License
+CoverFlow 支持外置及内嵌专辑封面
 
-The port is based on Rockbox and Rockpod, both distributed under GPL-2.0.
+优化播放界面的封面显示与文字滚动
+
+新增基于专辑封面的锁屏界面
+
+锁屏界面显示本地时间、电量和播放进度
+
+新增电子书阅读器
+
+支持 EPUB 和 MOBI7 格式电子书
+
+支持正文排版、翻页和阅读书签
+
+移除不必要的游戏文件，减小固件体积
