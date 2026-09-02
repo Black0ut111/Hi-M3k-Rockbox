@@ -32,19 +32,6 @@ index 44b7908..01d5134 100644
  
  #ifdef HAVE_RECORDING
  
-diff --git a/lib/rbcodec/codecs/codecs.make b/lib/rbcodec/codecs/codecs.make
-index 6f20a8c..988a249 100644
---- a/lib/rbcodec/codecs/codecs.make
-+++ b/lib/rbcodec/codecs/codecs.make
-@@ -222,6 +222,8 @@ $(CODECDIR)/aac_bsf.codec : $(CODECDIR)/libfaad.a
- 
- $(CODECS): $(CODEC_LIBS) # this must be last in codec dependency list
- 
-+$(CODECDIR)/dsd.o: CODECFLAGS += -O3 -funroll-loops -finline-functions -fomit-frame-pointer -falign-loops=32
-+
- # pattern rule for compiling codecs
- $(CODECDIR)/%.o: $(RBCODECLIB_DIR)/codecs/%.c
- 	$(SILENT)mkdir -p $(dir $@)
 diff --git a/lib/rbcodec/metadata/metadata.c b/lib/rbcodec/metadata/metadata.c
 index 708ded5..a7d68d1 100644
 --- a/lib/rbcodec/metadata/metadata.c
@@ -264,7 +251,7 @@ index 0000000..18bf54d
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..0697eb7
+index 0000000..858c171
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
 @@ -0,0 +1,481 @@
@@ -356,8 +343,8 @@ index 0000000..0697eb7
 +    }
 +}
 +
-+static int32_t decimate64(struct cic_state *state,
-+                          const unsigned char *p, bool lsb_first)
++static int32_t __attribute__((optimize("O3")))
++decimate64(struct cic_state *state, const unsigned char *p, bool lsb_first)
 +{
 +    for (int byte = 0; byte < 8; ++byte)
 +    {
@@ -1108,6 +1095,13 @@ index 0000000..80a3560
 +}
 +
 +#endif
+warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/codecs/codecs.make', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/rbcodec/metadata/metadata_parsers.h', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'apps/filetypes.c', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/SOURCES', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'lib/rbcodec/codecs/SOURCES', LF will be replaced by CRLF the next time Git touches it
