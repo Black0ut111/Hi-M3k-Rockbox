@@ -215,10 +215,10 @@ index 0000000..e86468f
 +}
 diff --git a/lib/rbcodec/codecs/dsd.c b/lib/rbcodec/codecs/dsd.c
 new file mode 100644
-index 0000000..fdbd882
+index 0000000..a4635b0
 --- /dev/null
 +++ b/lib/rbcodec/codecs/dsd.c
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,249 @@
 +/***************************************************************************
 + * DSD64 decoder for DSF and uncompressed stereo DSDIFF.
 + *
@@ -238,6 +238,15 @@ index 0000000..fdbd882
 +static unsigned char left_block[DSF_BLOCK];
 +static unsigned char right_block[DSF_BLOCK];
 +
++struct cic_state
++{
++    uint64_t integrator[3];
++    uint64_t delay[3];
++};
++
++static struct cic_state left_cic;
++static struct cic_state right_cic;
++
 +static uint32_t le32(const unsigned char *p)
 +{
 +    return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -255,19 +264,35 @@ index 0000000..fdbd882
 +    return (hi << 32) | lo;
 +}
 +
-+static unsigned popcount8(unsigned v)
++static void reset_filter(void)
 +{
-+    v = v - ((v >> 1) & 0x55);
-+    v = (v & 0x33) + ((v >> 2) & 0x33);
-+    return (v + (v >> 4)) & 0x0f;
++    ci->memset(&left_cic, 0, sizeof(left_cic));
++    ci->memset(&right_cic, 0, sizeof(right_cic));
 +}
 +
-+static int32_t decimate64(const unsigned char *p)
++static int32_t decimate64(struct cic_state *state,
++                          const unsigned char *p, bool lsb_first)
 +{
-+    unsigned ones = 0;
-+    for (int i = 0; i < 8; ++i)
-+        ones += popcount8(p[i]);
-+    return ((int32_t)ones - 32) << 23;
++    for (int byte = 0; byte < 8; ++byte)
++    {
++        unsigned value = p[byte];
++        for (int bit = 0; bit < 8; ++bit)
++        {
++            unsigned shift = lsb_first ? bit : 7 - bit;
++            state->integrator[0] += (value & (1u << shift)) ? 1 : (uint64_t)-1;
++            state->integrator[1] += state->integrator[0];
++            state->integrator[2] += state->integrator[1];
++        }
++    }
++
++    uint64_t value = state->integrator[2];
++    for (int stage = 0; stage < 3; ++stage)
++    {
++        uint64_t next = value - state->delay[stage];
++        state->delay[stage] = value;
++        value = next;
++    }
++    return (int32_t)(uint32_t)value * 1024;
 +}
 +
 +static bool read_exact(void *dst, size_t size)
@@ -275,7 +300,8 @@ index 0000000..fdbd882
 +    return ci->read_filebuf(dst, size) == size;
 +}
 +
-+static bool parse_dsf(uint64_t *data_size, uint64_t *sample_count)
++static bool parse_dsf(uint64_t *data_size, uint64_t *sample_count,
++                      bool *lsb_first)
 +{
 +    unsigned char h[92];
 +    if (!ci->seek_buffer(0) || !read_exact(h, sizeof(h)) ||
@@ -290,6 +316,7 @@ index 0000000..fdbd882
 +        return false;
 +    *data_size = chunk_size - 12;
 +    *sample_count = le64(h + 64);
++    *lsb_first = le32(h + 60) == 1;
 +    return true;
 +}
 +
@@ -297,9 +324,11 @@ index 0000000..fdbd882
 +{
 +    uint64_t remaining;
 +    uint64_t sample_count;
-+    if (!parse_dsf(&remaining, &sample_count))
++    bool lsb_first;
++    if (!parse_dsf(&remaining, &sample_count, &lsb_first))
 +        return CODEC_ERROR;
 +
++    reset_filter();
 +    uint64_t total = remaining;
 +    uint64_t total_frames = sample_count / 64;
 +    uint64_t frames_done = 0;
@@ -318,6 +347,7 @@ index 0000000..fdbd882
 +                return CODEC_ERROR;
 +            frames_done = block * PCM_FRAMES;
 +            remaining = total - MIN(total, block * DSF_BLOCK * 2);
++            reset_filter();
 +            ci->seek_complete();
 +        }
 +        if (!read_exact(left_block, DSF_BLOCK) || !read_exact(right_block, DSF_BLOCK))
@@ -325,8 +355,10 @@ index 0000000..fdbd882
 +        int frames = MIN((uint64_t)PCM_FRAMES, total_frames - frames_done);
 +        for (int i = 0; i < frames; ++i)
 +        {
-+            pcm[i * 2] = decimate64(left_block + i * 8);
-+            pcm[i * 2 + 1] = decimate64(right_block + i * 8);
++            pcm[i * 2] = decimate64(&left_cic, left_block + i * 8,
++                                    lsb_first);
++            pcm[i * 2 + 1] = decimate64(&right_cic, right_block + i * 8,
++                                        lsb_first);
 +        }
 +        ci->pcmbuf_insert(pcm, NULL, frames);
 +        frames_done += frames;
@@ -371,6 +403,7 @@ index 0000000..fdbd882
 +    if (!data_size)
 +        return CODEC_ERROR;
 +
++    reset_filter();
 +    uint64_t frames_done = 0;
 +    unsigned char packed[16];
 +    while (data_size >= sizeof(packed))
@@ -388,6 +421,7 @@ index 0000000..fdbd882
 +                return CODEC_ERROR;
 +            data_size = total_size - offset;
 +            frames_done = offset / 16;
++            reset_filter();
 +            ci->seek_complete();
 +        }
 +        int frames = 0;
@@ -399,8 +433,8 @@ index 0000000..fdbd882
 +                left_block[i] = packed[i * 2];
 +                right_block[i] = packed[i * 2 + 1];
 +            }
-+            pcm[frames * 2] = decimate64(left_block);
-+            pcm[frames * 2 + 1] = decimate64(right_block);
++            pcm[frames * 2] = decimate64(&left_cic, left_block, false);
++            pcm[frames * 2 + 1] = decimate64(&right_cic, right_block, false);
 +            ++frames;
 +            data_size -= sizeof(packed);
 +        }
